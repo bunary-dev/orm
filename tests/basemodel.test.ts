@@ -74,7 +74,11 @@ describe("BaseModel", () => {
 				expect(true).toBe(false); // Should not reach here
 			} catch (error) {
 				expect(error).toBeInstanceOf(Error);
-				expect((error as Error).message).toContain("tableName");
+				const errorMessage = (error as Error).message;
+				expect(errorMessage).toContain("tableName");
+				// Verify it uses the correct class name (TestModel), not "Function"
+				expect(errorMessage).toContain("TestModel");
+				expect(errorMessage).not.toContain("Function");
 			}
 		});
 

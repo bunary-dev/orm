@@ -68,6 +68,8 @@ export abstract class BaseModel {
 		modelClass: BaseModelConstructor,
 	): QueryBuilder {
 		if (!modelClass.tableName) {
+			// Use modelClass.name (not modelClass.constructor.name) because
+			// in static methods, this.constructor refers to Function, not the class
 			throw new Error(
 				`Model ${modelClass.name} must define a tableName property`,
 			);
