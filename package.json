@@ -1,0 +1,58 @@
+{
+  "name": "@bunary/orm",
+  "version": "0.0.1",
+  "description": "ORM for Bunary - a Bun-first backend framework inspired by Laravel",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun && bunx tsc -p tsconfig.build.json",
+    "test": "bun test",
+    "lint": "bunx biome check ./src ./tests",
+    "format": "bunx biome check --write ./src ./tests",
+    "typecheck": "bunx tsc --noEmit"
+  },
+  "keywords": [
+    "bunary",
+    "bun",
+    "orm",
+    "database",
+    "sql",
+    "nosql",
+    "framework"
+  ],
+  "author": "Paul Radford",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bunary-dev/orm.git"
+  },
+  "homepage": "https://github.com/bunary-dev/orm#readme",
+  "bugs": {
+    "url": "https://github.com/bunary-dev/orm/issues"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  },
+  "dependencies": {
+    "@bunary/core": "^0.0.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "1.3.6",
+    "bun-types": "latest",
+    "typescript": "^5.7.3"
+  }
+}
