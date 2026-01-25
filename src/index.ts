@@ -54,6 +54,7 @@ export { createDriver, getDriver } from "./connection.js";
 
 // Model
 export { Model } from "./model.js";
+export { BaseModel } from "./basemodel.js";
 
 // Database Drivers
 export { SqliteDriver, MysqlDriver } from "./drivers/index.js";
