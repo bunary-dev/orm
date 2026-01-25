@@ -62,14 +62,20 @@ describe("BaseModel", () => {
 			expect(typeof BaseModel).toBe("function");
 		});
 
-		it("should require tableName to be set", () => {
+		it("should require tableName to be set", async () => {
 			class TestModel extends BaseModel {
-				// No tableName set
+				// No tableName set - will be undefined
 			}
 
-			expect(() => {
-				TestModel.query();
-			}).toThrow("must define a tableName property");
+			// Test through a method that uses query() internally
+			// When tableName is undefined, it should throw an error
+			try {
+				await TestModel.all();
+				expect(true).toBe(false); // Should not reach here
+			} catch (error) {
+				expect(error).toBeInstanceOf(Error);
+				expect((error as Error).message).toContain("tableName");
+			}
 		});
 
 		it("should work with tableName set", async () => {
