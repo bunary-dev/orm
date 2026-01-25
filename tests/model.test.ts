@@ -1,9 +1,9 @@
+import { Database } from "bun:sqlite";
 /**
  * Model Tests - TDD approach
  * Following Red-Green-Refactor cycle
  */
-import { describe, expect, it, beforeAll, afterAll } from "bun:test";
-import { Database } from "bun:sqlite";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { Model, setOrmConfig } from "../src/index.js";
 import type { OrmConfig } from "../src/types.js";
 
@@ -173,9 +173,7 @@ describe("Model", () => {
 		});
 
 		it("should work with find()", async () => {
-			const user = await Model.table("users")
-				.select("id", "name")
-				.find(1);
+			const user = await Model.table("users").select("id", "name").find(1);
 
 			expect(user).not.toBeNull();
 			expect(user?.id).toBe(1);
@@ -289,10 +287,7 @@ describe("Model", () => {
 		});
 
 		it("should work with limit() and offset() for pagination", async () => {
-			const users = await Model.table("users")
-				.limit(1)
-				.offset(1)
-				.all();
+			const users = await Model.table("users").limit(1).offset(1).all();
 
 			expect(users).toHaveLength(1);
 			expect(users[0].name).toBe("Jane Smith");
@@ -301,9 +296,7 @@ describe("Model", () => {
 
 	describe("orderBy()", () => {
 		it("should order results ascending through Model API", async () => {
-			const users = await Model.table("users")
-				.orderBy("name", "asc")
-				.all();
+			const users = await Model.table("users").orderBy("name", "asc").all();
 
 			expect(users).toHaveLength(3);
 			expect(users[0].name).toBe("Bob Wilson");
@@ -312,9 +305,7 @@ describe("Model", () => {
 		});
 
 		it("should order results descending through Model API", async () => {
-			const users = await Model.table("users")
-				.orderBy("name", "desc")
-				.all();
+			const users = await Model.table("users").orderBy("name", "desc").all();
 
 			expect(users).toHaveLength(3);
 			expect(users[0].name).toBe("John Doe");
@@ -336,9 +327,7 @@ describe("Model", () => {
 
 	describe("where()", () => {
 		it("should filter results through Model API", async () => {
-			const users = await Model.table("users")
-				.where("name", "John Doe")
-				.all();
+			const users = await Model.table("users").where("name", "John Doe").all();
 
 			expect(users).toHaveLength(1);
 			expect(users[0].name).toBe("John Doe");
@@ -405,18 +394,14 @@ describe("Model", () => {
 		});
 
 		it("should work with orderBy() and first()", async () => {
-			const user = await Model.table("users")
-				.orderBy("name", "desc")
-				.first();
+			const user = await Model.table("users").orderBy("name", "desc").first();
 
 			expect(user).not.toBeNull();
 			expect(user?.name).toBe("John Doe");
 		});
 
 		it("should work with select() and first()", async () => {
-			const user = await Model.table("users")
-				.select("id", "name")
-				.first();
+			const user = await Model.table("users").select("id", "name").first();
 
 			expect(user).not.toBeNull();
 			expect(user?.id).toBe(1);
@@ -450,17 +435,13 @@ describe("Model", () => {
 		});
 
 		it("should ignore select() when counting", async () => {
-			const count = await Model.table("users")
-				.select("id", "name")
-				.count();
+			const count = await Model.table("users").select("id", "name").count();
 
 			expect(count).toBe(3);
 		});
 
 		it("should ignore limit() when counting", async () => {
-			const count = await Model.table("users")
-				.limit(1)
-				.count();
+			const count = await Model.table("users").limit(1).count();
 
 			expect(count).toBe(3);
 		});

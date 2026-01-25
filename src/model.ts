@@ -28,7 +28,6 @@ import type { QueryBuilder } from "./types.js";
  *   .all();
  * ```
  */
-// biome-ignore lint/complexity/noStaticOnlyClass: Eloquent-like API requires static methods
 export class Model {
 	/**
 	 * Start a query for a specific table

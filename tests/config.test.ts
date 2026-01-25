@@ -1,7 +1,7 @@
 /**
  * Config Tests - TDD approach
  */
-import { describe, expect, it, beforeEach } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 import {
 	clearOrmConfig,
 	defineOrmConfig,

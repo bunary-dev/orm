@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2] - 2026-01-26
+
+### Added
+
+- **BaseModel class** - Eloquent-like model base class for creating model classes
+  - Automatic exclusion of protected fields (similar to Laravel's `$guarded`)
+  - Automatic exclusion of timestamp fields (`createdAt`, `updatedAt` by default)
+  - All query builder methods available as static methods on model classes
+  - Example: `class Users extends BaseModel { protected static tableName = "users"; }`
+  - Usage: `await Users.find(1)`, `await Users.all()`, `await Users.where(...).first()`
+- **Additional Query Builder Methods**:
+  - `where(column, operatorOrValue, value?)` - Filter results with conditions
+  - `limit(count)` - Limit the number of results
+  - `offset(count)` - Skip records (pagination)
+  - `orderBy(column, direction?)` - Order results by column
+  - `first()` - Get the first matching record
+  - `count()` - Count matching records
+
+### Changed
+
+- Improved test coverage for Model API (138 tests total)
+- Enhanced documentation with BaseModel examples
+- Fixed error message to use `modelClass.name` instead of `modelClass.constructor.name` for correct class name display
+
 ## [0.0.1] - 2026-01-26
 
 ### Added
