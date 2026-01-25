@@ -86,6 +86,50 @@ setOrmConfig({
 
 ## API
 
+### Eloquent-like Models with `BaseModel`
+
+For an Eloquent-like experience, extend `BaseModel` to create model classes:
+
+```typescript
+import { BaseModel } from "@bunary/orm";
+
+class Users extends BaseModel {
+  protected static tableName = "users";
+  protected static protected = ["password", "secret_key"]; // Auto-excluded fields
+  protected static timestamps = true; // Auto-exclude createdAt, updatedAt
+}
+
+// Use it like Laravel Eloquent:
+const users = await Users.all(); // password and timestamps automatically excluded
+const user = await Users.find(1);
+const user = await Users.where("email", "john@example.com").first();
+const count = await Users.count();
+```
+
+#### BaseModel Features
+
+- **Automatic field exclusion**: Define `protected static protected = ["password"]` to automatically exclude sensitive fields
+- **Timestamp management**: Set `protected static timestamps = true` to exclude `createdAt` and `updatedAt`, or provide a custom array
+- **All query builder methods**: Available as static methods on your model class
+
+#### BaseModel Configuration
+
+```typescript
+class Users extends BaseModel {
+  // Required: Table name
+  protected static tableName = "users";
+  
+  // Optional: Fields to automatically exclude from all queries
+  protected static protected = ["password", "secret_key"];
+  
+  // Optional: Timestamp fields to exclude
+  // - true: Exclude createdAt, updatedAt (default)
+  // - false: Don't exclude timestamps
+  // - ["createdAt"]: Exclude only createdAt
+  protected static timestamps = true;
+}
+```
+
 ### `Model.table(tableName)`
 
 Start a query for a specific table. Returns a `QueryBuilder` instance.
@@ -134,6 +178,80 @@ const users = await Model.table("users")
   .exclude("password", "secret_key")
   .all();
 // Returns all columns except password and secret_key
+```
+
+#### `where(column: string, operatorOrValue: string | number | boolean, value?: string | number | boolean)`
+
+Add a where condition to filter results.
+
+```typescript
+// Simple equality (default operator is '=')
+const users = await Model.table("users")
+  .where("age", 25)
+  .all();
+
+// With explicit operator
+const users = await Model.table("users")
+  .where("age", ">", 18)
+  .all();
+```
+
+#### `limit(count: number)`
+
+Limit the number of results returned.
+
+```typescript
+const users = await Model.table("users")
+  .limit(10)
+  .all();
+```
+
+#### `offset(count: number)`
+
+Skip a number of records (useful for pagination).
+
+```typescript
+const users = await Model.table("users")
+  .limit(10)
+  .offset(20) // Skip first 20 records
+  .all();
+```
+
+#### `orderBy(column: string, direction?: "asc" | "desc")`
+
+Order results by a column.
+
+```typescript
+const users = await Model.table("users")
+  .orderBy("name", "asc")
+  .all();
+
+// Default direction is 'asc'
+const users = await Model.table("users")
+  .orderBy("created_at")
+  .all();
+```
+
+#### `first()`
+
+Get the first record matching the query.
+
+```typescript
+const user = await Model.table("users")
+  .where("email", "john@example.com")
+  .first();
+// Returns: { id: 1, name: "John", ... } or null
+```
+
+#### `count()`
+
+Count the number of records matching the query.
+
+```typescript
+const total = await Model.table("users").count();
+const activeUsers = await Model.table("users")
+  .where("active", true)
+  .count();
 ```
 
 ### Method Chaining

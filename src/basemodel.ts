@@ -232,7 +232,10 @@ export abstract class BaseModel {
 	 * Find a record by ID
 	 */
 	static async find(id: string | number): Promise<ModelData | null> {
-		// Get the class that called this method (the subclass)
+		// In TypeScript, 'this' in static methods refers to the class the method was called on.
+		// When Users.find() is called, 'this' refers to Users (the subclass), not BaseModel.
+		// This is the correct behavior for Eloquent-like inheritance and is required for the API.
+		// Biome's noThisInStatic rule is disabled in biome.json for this legitimate use case.
 		const modelClass = this as unknown as BaseModelConstructor;
 		const result = await BaseModel.queryForModel(modelClass).find(id);
 		return BaseModel.applyExclusionsForModel(modelClass, result);
@@ -242,7 +245,6 @@ export abstract class BaseModel {
 	 * Get all records
 	 */
 	static async all(): Promise<ModelData[]> {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		const results = await BaseModel.queryForModel(modelClass).all();
 		return BaseModel.applyExclusionsToArrayForModel(modelClass, results);
@@ -254,7 +256,6 @@ export abstract class BaseModel {
 	 * This is handled by applying exclusions to results after the query executes
 	 */
 	static select(...columns: string[]): QueryBuilder {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		// Create a query builder with select
 		const baseQuery = Model.table(modelClass.tableName);
@@ -269,7 +270,6 @@ export abstract class BaseModel {
 	 * This adds to the protected fields and timestamps exclusion
 	 */
 	static exclude(...columns: string[]): QueryBuilder {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		const query = BaseModel.queryForModel(modelClass);
 		return query.exclude(...columns);
@@ -283,7 +283,6 @@ export abstract class BaseModel {
 		operatorOrValue: string | number | boolean,
 		value?: string | number | boolean,
 	): QueryBuilder {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		return BaseModel.queryForModel(modelClass).where(
 			column,
@@ -296,7 +295,6 @@ export abstract class BaseModel {
 	 * Limit the number of results
 	 */
 	static limit(count: number): QueryBuilder {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		return BaseModel.queryForModel(modelClass).limit(count);
 	}
@@ -305,7 +303,6 @@ export abstract class BaseModel {
 	 * Offset the results
 	 */
 	static offset(count: number): QueryBuilder {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		return BaseModel.queryForModel(modelClass).offset(count);
 	}
@@ -314,7 +311,6 @@ export abstract class BaseModel {
 	 * Order the results
 	 */
 	static orderBy(column: string, direction?: "asc" | "desc"): QueryBuilder {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		return BaseModel.queryForModel(modelClass).orderBy(column, direction);
 	}
@@ -323,7 +319,6 @@ export abstract class BaseModel {
 	 * Get the first record
 	 */
 	static async first(): Promise<ModelData | null> {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		const result = await BaseModel.queryForModel(modelClass).first();
 		return BaseModel.applyExclusionsForModel(modelClass, result);
@@ -333,7 +328,6 @@ export abstract class BaseModel {
 	 * Count the records
 	 */
 	static async count(): Promise<number> {
-		// Get the class that called this method (the subclass)
 		const modelClass = this as unknown as BaseModelConstructor;
 		return BaseModel.queryForModel(modelClass).count();
 	}
