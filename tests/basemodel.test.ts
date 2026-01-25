@@ -1,9 +1,9 @@
+import { Database } from "bun:sqlite";
 /**
  * BaseModel Tests - TDD approach
  * Following Red-Green-Refactor cycle
  */
-import { describe, expect, it, beforeAll, afterAll } from "bun:test";
-import { Database } from "bun:sqlite";
+import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { BaseModel, setOrmConfig } from "../src/index.js";
 import type { OrmConfig } from "../src/types.js";
 

@@ -23,9 +23,10 @@
  * ```
  */
 
-import { Model, type QueryBuilder, type ModelData } from "./index.js";
+import { Model, type ModelData, type QueryBuilder } from "./index.js";
 
-// biome-ignore lint/complexity/noStaticOnlyClass: Eloquent-like API requires static methods with inheritance
+type BaseModelConstructor = typeof BaseModel;
+
 export abstract class BaseModel {
 	/**
 	 * The table name this model represents
@@ -63,23 +64,19 @@ export abstract class BaseModel {
 	 * Get a query builder instance for this model's table
 	 * Automatically applies protected fields and timestamps exclusion
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass, not BaseModel
-	protected static query(): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		if (!this.tableName) {
-			// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
+	protected static queryForModel(
+		modelClass: BaseModelConstructor,
+	): QueryBuilder {
+		if (!modelClass.tableName) {
 			throw new Error(
-				// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-				`Model ${this.constructor.name} must define a tableName property`,
+				`Model ${modelClass.name} must define a tableName property`,
 			);
 		}
 
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		let query = Model.table(this.tableName);
+		let query = Model.table(modelClass.tableName);
 
 		// Get fields to exclude
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const fieldsToExclude = this.getFieldsToExclude();
+		const fieldsToExclude = BaseModel.getFieldsToExcludeForModel(modelClass);
 
 		// If there are fields to exclude, add them to the query
 		if (fieldsToExclude.length > 0) {
@@ -93,20 +90,18 @@ export abstract class BaseModel {
 	 * Get the list of fields that should be excluded from queries
 	 * Combines protected fields and timestamps
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-	protected static getFieldsToExclude(): string[] {
+	protected static getFieldsToExcludeForModel(
+		modelClass: BaseModelConstructor,
+	): string[] {
 		const excluded: string[] = [];
 
 		// Add protected fields
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		if (this.protected && Array.isArray(this.protected)) {
-			// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-			excluded.push(...this.protected);
+		if (modelClass.protected && Array.isArray(modelClass.protected)) {
+			excluded.push(...modelClass.protected);
 		}
 
 		// Add timestamp fields
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const timestampFields = this.getTimestampFields();
+		const timestampFields = BaseModel.getTimestampFieldsForModel(modelClass);
 		if (timestampFields.length > 0) {
 			excluded.push(...timestampFields);
 		}
@@ -118,25 +113,22 @@ export abstract class BaseModel {
 	 * Get the timestamp fields that should be excluded
 	 * Returns empty array if timestamps are disabled
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-	protected static getTimestampFields(): string[] {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
+	protected static getTimestampFieldsForModel(
+		modelClass: BaseModelConstructor,
+	): string[] {
 		// If timestamps is explicitly false, don't exclude any
-		if (this.timestamps === false) {
+		if (modelClass.timestamps === false) {
 			return [];
 		}
 
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 		// If timestamps is true or undefined, use default timestamps
-		if (this.timestamps === true || this.timestamps === undefined) {
+		if (modelClass.timestamps === true || modelClass.timestamps === undefined) {
 			return ["createdAt", "updatedAt"];
 		}
 
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 		// If timestamps is an array, use those fields
-		if (Array.isArray(this.timestamps)) {
-			// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-			return this.timestamps;
+		if (Array.isArray(modelClass.timestamps)) {
+			return modelClass.timestamps;
 		}
 
 		return [];
@@ -146,14 +138,15 @@ export abstract class BaseModel {
 	 * Apply field exclusions to a result
 	 * This is used when results come from methods that bypass the query builder
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-	protected static applyExclusions(data: ModelData | null): ModelData | null {
+	protected static applyExclusionsForModel(
+		modelClass: BaseModelConstructor,
+		data: ModelData | null,
+	): ModelData | null {
 		if (!data) {
 			return null;
 		}
 
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const fieldsToExclude = this.getFieldsToExclude();
+		const fieldsToExclude = BaseModel.getFieldsToExcludeForModel(modelClass);
 		if (fieldsToExclude.length === 0) {
 			return data;
 		}
@@ -169,33 +162,33 @@ export abstract class BaseModel {
 	/**
 	 * Apply field exclusions to an array of results
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-	protected static applyExclusionsToArray(
+	protected static applyExclusionsToArrayForModel(
+		modelClass: BaseModelConstructor,
 		data: ModelData[],
 	): ModelData[] {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return data.map((item) => this.applyExclusions(item) as ModelData);
+		return data.map(
+			(item) =>
+				BaseModel.applyExclusionsForModel(modelClass, item) as ModelData,
+		);
 	}
 
 	/**
 	 * Create a wrapped QueryBuilder that applies exclusions to results
 	 * This is needed when select() is used, since select() takes precedence over exclude()
 	 */
-	protected static createWrappedQueryBuilder(
+	protected static createWrappedQueryBuilderForModel(
+		modelClass: BaseModelConstructor,
 		query: QueryBuilder,
 	): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const modelClass = this;
-
 		// Create a wrapper object that implements QueryBuilder
 		return {
 			select: (...columns: string[]) => {
 				const result = query.select(...columns);
-				return modelClass.createWrappedQueryBuilder(result);
+				return BaseModel.createWrappedQueryBuilderForModel(modelClass, result);
 			},
 			exclude: (...columns: string[]) => {
 				const result = query.exclude(...columns);
-				return modelClass.createWrappedQueryBuilder(result);
+				return BaseModel.createWrappedQueryBuilderForModel(modelClass, result);
 			},
 			where: (
 				column: string,
@@ -203,31 +196,31 @@ export abstract class BaseModel {
 				value?: string | number | boolean,
 			) => {
 				const result = query.where(column, operatorOrValue, value);
-				return modelClass.createWrappedQueryBuilder(result);
+				return BaseModel.createWrappedQueryBuilderForModel(modelClass, result);
 			},
 			limit: (count: number) => {
 				const result = query.limit(count);
-				return modelClass.createWrappedQueryBuilder(result);
+				return BaseModel.createWrappedQueryBuilderForModel(modelClass, result);
 			},
 			offset: (count: number) => {
 				const result = query.offset(count);
-				return modelClass.createWrappedQueryBuilder(result);
+				return BaseModel.createWrappedQueryBuilderForModel(modelClass, result);
 			},
 			orderBy: (column: string, direction?: "asc" | "desc") => {
 				const result = query.orderBy(column, direction);
-				return modelClass.createWrappedQueryBuilder(result);
+				return BaseModel.createWrappedQueryBuilderForModel(modelClass, result);
 			},
 			all: async () => {
 				const results = await query.all();
-				return modelClass.applyExclusionsToArray(results);
+				return BaseModel.applyExclusionsToArrayForModel(modelClass, results);
 			},
 			find: async (id: string | number) => {
 				const result = await query.find(id);
-				return modelClass.applyExclusions(result);
+				return BaseModel.applyExclusionsForModel(modelClass, result);
 			},
 			first: async () => {
 				const result = await query.first();
-				return modelClass.applyExclusions(result);
+				return BaseModel.applyExclusionsForModel(modelClass, result);
 			},
 			count: async () => {
 				return query.count();
@@ -238,23 +231,21 @@ export abstract class BaseModel {
 	/**
 	 * Find a record by ID
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static async find(id: string | number): Promise<ModelData | null> {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const result = await this.query().find(id);
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.applyExclusions(result);
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		const result = await BaseModel.queryForModel(modelClass).find(id);
+		return BaseModel.applyExclusionsForModel(modelClass, result);
 	}
 
 	/**
 	 * Get all records
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static async all(): Promise<ModelData[]> {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const results = await this.query().all();
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.applyExclusionsToArray(results);
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		const results = await BaseModel.queryForModel(modelClass).all();
+		return BaseModel.applyExclusionsToArrayForModel(modelClass, results);
 	}
 
 	/**
@@ -262,89 +253,88 @@ export abstract class BaseModel {
 	 * Note: Protected fields and timestamps are still excluded even if selected
 	 * This is handled by applying exclusions to results after the query executes
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static select(...columns: string[]): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
 		// Create a query builder with select
-		const baseQuery = Model.table(this.tableName);
+		const baseQuery = Model.table(modelClass.tableName);
 		const selectQuery = baseQuery.select(...columns);
 
 		// Return a wrapped query builder that applies exclusions to results
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.createWrappedQueryBuilder(selectQuery);
+		return BaseModel.createWrappedQueryBuilderForModel(modelClass, selectQuery);
 	}
 
 	/**
 	 * Exclude specific columns
 	 * This adds to the protected fields and timestamps exclusion
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static exclude(...columns: string[]): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const query = this.query();
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		const query = BaseModel.queryForModel(modelClass);
 		return query.exclude(...columns);
 	}
 
 	/**
 	 * Add a where clause
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static where(
 		column: string,
 		operatorOrValue: string | number | boolean,
 		value?: string | number | boolean,
 	): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.query().where(column, operatorOrValue, value);
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		return BaseModel.queryForModel(modelClass).where(
+			column,
+			operatorOrValue,
+			value,
+		);
 	}
 
 	/**
 	 * Limit the number of results
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static limit(count: number): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.query().limit(count);
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		return BaseModel.queryForModel(modelClass).limit(count);
 	}
 
 	/**
 	 * Offset the results
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static offset(count: number): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.query().offset(count);
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		return BaseModel.queryForModel(modelClass).offset(count);
 	}
 
 	/**
 	 * Order the results
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-	static orderBy(
-		column: string,
-		direction?: "asc" | "desc",
-	): QueryBuilder {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.query().orderBy(column, direction);
+	static orderBy(column: string, direction?: "asc" | "desc"): QueryBuilder {
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		return BaseModel.queryForModel(modelClass).orderBy(column, direction);
 	}
 
 	/**
 	 * Get the first record
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static async first(): Promise<ModelData | null> {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		const result = await this.query().first();
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.applyExclusions(result);
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		const result = await BaseModel.queryForModel(modelClass).first();
+		return BaseModel.applyExclusionsForModel(modelClass, result);
 	}
 
 	/**
 	 * Count the records
 	 */
-	// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
 	static async count(): Promise<number> {
-		// biome-ignore lint/complexity/noThisInStatic: Need 'this' to refer to subclass
-		return this.query().count();
+		// Get the class that called this method (the subclass)
+		const modelClass = this as unknown as BaseModelConstructor;
+		return BaseModel.queryForModel(modelClass).count();
 	}
 }
