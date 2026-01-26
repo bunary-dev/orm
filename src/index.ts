@@ -45,6 +45,7 @@
 export {
 	clearOrmConfig,
 	defineOrmConfig,
+	enableCoreConfig,
 	getOrmConfig,
 	setOrmConfig,
 } from "./config.js";
