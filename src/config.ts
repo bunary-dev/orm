@@ -78,18 +78,45 @@ function tryGetCoreConfig(): OrmConfig | null {
 		// biome-ignore lint/suspicious/noExplicitAny: Core module type is dynamic
 		let coreModule: any = null;
 
-		// Try to get from Bun's module cache first (fastest)
+		// Try multiple methods to load the core module
+		// Method 1: Try Bun's module cache (fastest, works if core already loaded)
 		// biome-ignore lint/suspicious/noExplicitAny: Bun internal API
 		const moduleCache = (globalThis as any).__bun?.moduleCache;
 		if (moduleCache?.[coreModuleId]) {
 			coreModule = moduleCache[coreModuleId].exports;
-		} else {
-			// Fallback: try require (works in Bun runtime)
-			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			coreModule = require(coreModuleId);
 		}
 
-		// Check if getBunaryConfig exists
+		// Method 2: Try import.meta.require (Bun runtime feature)
+		if (!coreModule) {
+			try {
+				// @ts-ignore - Bun runtime feature
+				coreModule = import.meta.require?.(coreModuleId);
+			} catch {
+				// import.meta.require not available or failed
+			}
+		}
+
+		// Method 3: Try __require (Bun's internal require)
+		if (!coreModule) {
+			try {
+				// @ts-ignore - Bun internal
+				coreModule = __require?.(coreModuleId);
+			} catch {
+				// __require not available or failed
+			}
+		}
+
+		// Method 4: Try regular require (works in some contexts)
+		if (!coreModule) {
+			try {
+				// eslint-disable-next-line @typescript-eslint/no-require-imports
+				coreModule = require(coreModuleId);
+			} catch {
+				// require not available or failed
+			}
+		}
+
+		// Check if getBunaryConfig exists and get the config
 		if (coreModule?.getBunaryConfig) {
 			const coreConfig = coreModule.getBunaryConfig();
 			if (coreConfig?.orm) {
@@ -98,7 +125,7 @@ function tryGetCoreConfig(): OrmConfig | null {
 			}
 		}
 	} catch {
-		// Core not available, not loaded yet, or require doesn't work
+		// Core not available, not loaded yet, or loading methods don't work
 		// This is expected if core config hasn't been set up yet
 		// Fall back to explicit ORM config
 	}
