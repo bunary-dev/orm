@@ -50,9 +50,36 @@ Model → Query Builder → Database Driver → Database
 
 ## Configuration
 
-Configure the ORM using `setOrmConfig()` with credentials:
+The ORM can be configured in two ways:
 
-### SQLite
+### Option 1: Using @bunary/core (Recommended)
+
+Configure the ORM alongside your app configuration using `@bunary/core`:
+
+```typescript
+import { defineConfig } from "@bunary/core";
+
+defineConfig({
+  app: {
+    name: "MyApp",
+    env: "development",
+  },
+  orm: {
+    database: {
+      type: "sqlite",
+      sqlite: {
+        path: "./database.sqlite"
+      }
+    }
+  }
+});
+```
+
+The ORM will automatically read its configuration from `@bunary/core` when no explicit config is set.
+
+### Option 2: Using setOrmConfig()
+
+You can also configure the ORM directly using `setOrmConfig()`:
 
 ```typescript
 import { setOrmConfig } from "@bunary/orm";
@@ -67,9 +94,54 @@ setOrmConfig({
 });
 ```
 
+**Note:** `setOrmConfig()` will override any configuration from `@bunary/core`.
+
+### SQLite
+
+```typescript
+// Using @bunary/core
+defineConfig({
+  orm: {
+    database: {
+      type: "sqlite",
+      sqlite: {
+        path: "./database.sqlite"
+      }
+    }
+  }
+});
+
+// Or using setOrmConfig()
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: {
+      path: "./database.sqlite"
+    }
+  }
+});
+```
+
 ### MySQL (Coming Soon)
 
 ```typescript
+// Using @bunary/core
+defineConfig({
+  orm: {
+    database: {
+      type: "mysql",
+      mysql: {
+        host: "localhost",
+        port: 3306,
+        user: "root",
+        password: "password",
+        database: "mydb"
+      }
+    }
+  }
+});
+
+// Or using setOrmConfig()
 setOrmConfig({
   database: {
     type: "mysql",
