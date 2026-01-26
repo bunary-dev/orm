@@ -74,55 +74,75 @@ function tryGetCoreConfig(): OrmConfig | null {
 	// Try to get from core config
 	// This works if core has been loaded and defineConfig() has been called
 	try {
-		const coreModuleId = "@bunary/core";
-		// biome-ignore lint/suspicious/noExplicitAny: Core module type is dynamic
-		let coreModule: any = null;
-
-		// Try multiple methods to load the core module
-		// Method 1: Try Bun's module cache (fastest, works if core already loaded)
-		// biome-ignore lint/suspicious/noExplicitAny: Bun internal API
-		const moduleCache = (globalThis as any).__bun?.moduleCache;
-		if (moduleCache?.[coreModuleId]) {
-			coreModule = moduleCache[coreModuleId].exports;
-		}
-
-		// Method 2: Try import.meta.require (Bun runtime feature)
-		if (!coreModule) {
-			try {
-				// @ts-ignore - Bun runtime feature
-				coreModule = import.meta.require?.(coreModuleId);
-			} catch {
-				// import.meta.require not available or failed
-			}
-		}
-
-		// Method 3: Try __require (Bun's internal require)
-		if (!coreModule) {
-			try {
-				// @ts-ignore - Bun internal
-				coreModule = __require?.(coreModuleId);
-			} catch {
-				// __require not available or failed
-			}
-		}
-
-		// Method 4: Try regular require (works in some contexts)
-		if (!coreModule) {
-			try {
-				// eslint-disable-next-line @typescript-eslint/no-require-imports
-				coreModule = require(coreModuleId);
-			} catch {
-				// require not available or failed
-			}
-		}
-
-		// Check if getBunaryConfig exists and get the config
-		if (coreModule?.getBunaryConfig) {
-			const coreConfig = coreModule.getBunaryConfig();
+		// Method 1: Try global registry (set by @bunary/core when loaded)
+		// biome-ignore lint/suspicious/noExplicitAny: Global registry for cross-package access
+		const coreRegistry = (globalThis as any).__bunaryCoreConfig;
+		if (coreRegistry?.getConfig) {
+			const coreConfig = coreRegistry.getConfig();
 			if (coreConfig?.orm) {
 				coreConfigCache = coreConfig.orm;
 				return coreConfig.orm;
 			}
+		}
+
+		// Method 2: Try Bun's module cache (fastest, works if core already loaded)
+		// biome-ignore lint/suspicious/noExplicitAny: Bun internal API
+		const moduleCache = (globalThis as any).__bun?.moduleCache;
+		const coreModuleId = "@bunary/core";
+		if (moduleCache?.[coreModuleId]) {
+			const coreModule = moduleCache[coreModuleId].exports;
+			if (coreModule?.getBunaryConfig) {
+				const coreConfig = coreModule.getBunaryConfig();
+				if (coreConfig?.orm) {
+					coreConfigCache = coreConfig.orm;
+					return coreConfig.orm;
+				}
+			}
+		}
+
+		// Method 3: Try import.meta.require (Bun runtime feature)
+		try {
+			// @ts-ignore - Bun runtime feature
+			const coreModule = import.meta.require?.(coreModuleId);
+			if (coreModule?.getBunaryConfig) {
+				const coreConfig = coreModule.getBunaryConfig();
+				if (coreConfig?.orm) {
+					coreConfigCache = coreConfig.orm;
+					return coreConfig.orm;
+				}
+			}
+		} catch {
+			// import.meta.require not available or failed
+		}
+
+		// Method 4: Try __require (Bun's internal require)
+		try {
+			// @ts-ignore - Bun internal
+			const coreModule = __require?.(coreModuleId);
+			if (coreModule?.getBunaryConfig) {
+				const coreConfig = coreModule.getBunaryConfig();
+				if (coreConfig?.orm) {
+					coreConfigCache = coreConfig.orm;
+					return coreConfig.orm;
+				}
+			}
+		} catch {
+			// __require not available or failed
+		}
+
+		// Method 5: Try regular require (works in some contexts)
+		try {
+			// eslint-disable-next-line @typescript-eslint/no-require-imports
+			const coreModule = require(coreModuleId);
+			if (coreModule?.getBunaryConfig) {
+				const coreConfig = coreModule.getBunaryConfig();
+				if (coreConfig?.orm) {
+					coreConfigCache = coreConfig.orm;
+					return coreConfig.orm;
+				}
+			}
+		} catch {
+			// require not available or failed
 		}
 	} catch {
 		// Core not available, not loaded yet, or loading methods don't work
