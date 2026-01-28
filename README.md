@@ -4,6 +4,10 @@ ORM for Bunary - a Bun-first backend framework inspired by Laravel Eloquent.
 
 Features a database abstraction layer that supports multiple database types through a unified API.
 
+## Documentation
+
+Canonical documentation for this package lives in [`docs/index.md`](./docs/index.md).
+
 ## Installation
 
 ```bash
