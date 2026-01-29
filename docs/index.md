@@ -186,6 +186,46 @@ repo.deleteBatch(2);
 
 API: `ensureTable()`, `log(name, batch)`, `listApplied()`, `getNextBatchNumber()`, `getLastBatch()`, `deleteLog(name)`, `deleteBatch(batch)`.
 
+## Migrator Runner
+
+Run and rollback migrations. Discovers migration files, runs pending migrations in order, and supports rollback. Uses transactions for safety.
+
+```ts
+import { createMigrator, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" },
+  },
+});
+
+const migrator = createMigrator({ migrationsPath: "./database/migrations" });
+
+const status = await migrator.status();
+await migrator.up();
+await migrator.down();
+await migrator.down({ steps: 2 });
+```
+
+Migration files export `up()` and `down()`:
+
+```ts
+import { getDriver } from "@bunary/orm";
+
+export async function up() {
+  const driver = getDriver();
+  driver.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+}
+
+export async function down() {
+  const driver = getDriver();
+  driver.exec("DROP TABLE users");
+}
+```
+
+API: `createMigrator(options?)`, `migrator.status()`, `migrator.up()`, `migrator.down({ steps? })`.
+
 ## Requirements
 
 - Bun ≥ 1.0.0

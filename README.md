@@ -510,6 +510,56 @@ repo.deleteBatch(2); // Remove all migrations in batch 2
 
 **API:** `ensureTable()`, `log(name, batch)`, `listApplied()`, `getNextBatchNumber()`, `getLastBatch()`, `deleteLog(name)`, `deleteBatch(batch)`.
 
+### Migrator Runner
+
+Run and rollback migrations using the `createMigrator()` API. Discovers migration files, runs pending migrations in order, and supports rollback. Uses transactions for safety.
+
+```typescript
+import { createMigrator, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" }
+  }
+});
+
+const migrator = createMigrator({ migrationsPath: "./database/migrations" });
+
+// Check status
+const status = await migrator.status();
+console.log("Ran:", status.ran);
+console.log("Pending:", status.pending);
+
+// Run all pending migrations
+await migrator.up();
+
+// Rollback last batch
+await migrator.down();
+
+// Rollback multiple batches
+await migrator.down({ steps: 2 });
+```
+
+**Migration file format:** Each migration file must export `up()` and `down()` functions:
+
+```typescript
+// database/migrations/20260101000000_create_users.ts
+import { getDriver } from "@bunary/orm";
+
+export async function up() {
+  const driver = getDriver();
+  driver.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+}
+
+export async function down() {
+  const driver = getDriver();
+  driver.exec("DROP TABLE users");
+}
+```
+
+**API:** `createMigrator(options?)`, `migrator.status()`, `migrator.up()`, `migrator.down({ steps? })`. Migrations run in transactions - if any migration fails, all changes are rolled back.
+
 ## Advanced Usage
 
 ### Direct Driver Access

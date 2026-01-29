@@ -73,6 +73,14 @@ export type { TableBuilder, TableBuilderCallback } from "./schema/index.js";
 export { MigrationsRepository } from "./migrations/index.js";
 export type { MigrationRecord } from "./migrations/index.js";
 
+// Migrator runner
+export { createMigrator, Migrator } from "./migrations/index.js";
+export type {
+	MigratorOptions,
+	MigrationStatus,
+	MigrationModule,
+} from "./migrations/index.js";
+
 // Database Drivers
 export { SqliteDriver, MysqlDriver } from "./drivers/index.js";
 export type { DatabaseDriver, QueryResult } from "./drivers/types.js";
