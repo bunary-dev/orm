@@ -39,7 +39,6 @@ class SqliteQueryResult implements QueryResult {
  */
 export class SqliteDriver implements DatabaseDriver {
 	private db: Database;
-	private inTransaction = false;
 
 	constructor(path: string) {
 		this.db = new Database(path);
@@ -66,7 +65,7 @@ export class SqliteDriver implements DatabaseDriver {
 
 	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {
 		// Create a transaction-scoped driver instance
-		const txDriver = new SqliteTransactionDriver(this.db, false);
+		const txDriver = new SqliteTransactionDriver(this.db);
 
 		// Check if function is async by calling it and checking the result
 		// But we need to start the transaction BEFORE executing operations
@@ -75,7 +74,6 @@ export class SqliteDriver implements DatabaseDriver {
 			return new Promise<T>((resolve, reject) => {
 				// Begin transaction FIRST
 				this.db.exec("BEGIN TRANSACTION");
-				this.inTransaction = true;
 
 				try {
 					// Now execute the callback
@@ -87,7 +85,6 @@ export class SqliteDriver implements DatabaseDriver {
 							.then((value) => {
 								// Commit on success
 								this.db.exec("COMMIT");
-								this.inTransaction = false;
 								resolve(value);
 							})
 							.catch((error) => {
@@ -97,13 +94,11 @@ export class SqliteDriver implements DatabaseDriver {
 								} catch {
 									// Ignore rollback errors
 								}
-								this.inTransaction = false;
 								reject(error);
 							});
 					} else {
 						// Sync callback - commit and resolve
 						this.db.exec("COMMIT");
-						this.inTransaction = false;
 						resolve(result);
 					}
 				} catch (error) {
@@ -113,7 +108,6 @@ export class SqliteDriver implements DatabaseDriver {
 					} catch {
 						// Ignore rollback errors
 					}
-					this.inTransaction = false;
 					reject(error);
 				}
 			});
@@ -143,13 +137,10 @@ export class SqliteDriver implements DatabaseDriver {
  */
 class SqliteTransactionDriver implements DatabaseDriver {
 	private db: Database;
-	private savepointCounter = 0;
 	private static globalSavepointCounter = 0;
-	private inTransaction: boolean;
 
-	constructor(db: Database, inTransaction = false) {
+	constructor(db: Database) {
 		this.db = db;
-		this.inTransaction = inTransaction;
 	}
 
 	query(sql: string, ...params: unknown[]): QueryResult {
@@ -179,7 +170,7 @@ class SqliteTransactionDriver implements DatabaseDriver {
 
 		try {
 			// Create nested transaction driver
-			const nestedTxDriver = new SqliteTransactionDriver(this.db, true);
+			const nestedTxDriver = new SqliteTransactionDriver(this.db);
 			const result = fn(nestedTxDriver);
 
 			// Handle async/sync result
