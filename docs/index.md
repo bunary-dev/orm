@@ -126,6 +126,40 @@ await driver.transaction(async (tx) => {
 });
 ```
 
+## Schema Builder (Migrations)
+
+DDL for creating and altering tables (SQLite):
+
+```ts
+import { Schema, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" },
+  },
+});
+
+// Create a table
+Schema.createTable("users", (table) => {
+  table.increments("id");
+  table.text("name");
+  table.text("email").unique();
+  table.boolean("active");
+  table.timestamps();
+});
+
+// Alter a table (add columns)
+Schema.table("users", (table) => {
+  table.text("phone");
+});
+
+// Drop a table
+Schema.dropTable("users");
+```
+
+TableBuilder: `increments("id")`, `integer()`, `text()`, `boolean()`, `timestamps()`, `unique()`, `index()`.
+
 ## Requirements
 
 - Bun ≥ 1.0.0

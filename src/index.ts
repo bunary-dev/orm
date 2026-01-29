@@ -65,6 +65,10 @@ export {
 export { Model } from "./model.js";
 export { BaseModel } from "./basemodel.js";
 
+// Schema builder
+export { Schema } from "./schema/index.js";
+export type { TableBuilder, TableBuilderCallback } from "./schema/index.js";
+
 // Database Drivers
 export { SqliteDriver, MysqlDriver } from "./drivers/index.js";
 export type { DatabaseDriver, QueryResult } from "./drivers/types.js";

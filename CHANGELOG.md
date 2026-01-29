@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.9] - 2026-01-29
+
+### Added
+
+- **Schema builder (SQLite)** - DDL for migrations
+  - `Schema.createTable(name, (table) => { ... })` - create table with fluent TableBuilder
+  - `Schema.dropTable(name)` - drop table if exists
+  - `Schema.table(name, (table) => { ... })` - alter table (add columns)
+  - TableBuilder: `increments("id")`, `integer()`, `text()`, `boolean()`, `timestamps()`, `unique()`, `index()`
+  - SQLite implementation emits and executes SQL via the configured driver
+  - Tests cover create/drop/alter, column types, unique, and index
+
 ## [0.0.8] - 2026-01-29
 
 ### Added
