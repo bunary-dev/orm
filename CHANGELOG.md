@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.12] - 2026-01-29
+
+### Added
+
+- **Enhanced Schema Builder** - Complete migrations system with full column types and modifiers
+  - `Schema.hasTable(name)` - Check if table exists
+  - `Schema.hasColumn(table, column)` - Check if column exists
+  - `Schema.renameTable(oldName, newName)` - Rename a table
+  - New column types: `string(name, length?)`, `timestamp(name)`, `foreignId(name)`
+  - Column modifiers: `.nullable()`, `.notNull()`, `.default(value)`, `.primary()`
+  - Foreign key constraints: `foreign("col").references("table", "column")`, `foreignId("col").references("table", "column")`
+  - Enhanced `integer()`, `text()`, `boolean()` to return `ColumnBuilder` with modifiers
+  - Full test coverage (20 tests total for Schema Builder)
+
 ## [0.0.11] - 2026-01-29
 
 ### Added

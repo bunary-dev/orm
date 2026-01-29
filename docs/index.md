@@ -158,7 +158,13 @@ Schema.table("users", (table) => {
 Schema.dropTable("users");
 ```
 
-TableBuilder: `increments("id")`, `integer()`, `text()`, `boolean()`, `timestamps()`, `unique()`, `index()`.
+Schema methods: `createTable()`, `dropTable()`, `table()` (alter), `hasTable()`, `hasColumn()`, `renameTable()`.
+
+Column types: `increments()`, `integer()`, `text()`, `string()`, `boolean()`, `timestamp()`, `foreignId()`, `timestamps()`.
+
+Modifiers: `.nullable()`, `.notNull()`, `.default()`, `.unique()`, `.primary()`.
+
+Constraints: `unique()`, `index()`, `foreign().references()`.
 
 ## Migrations Repository
 
