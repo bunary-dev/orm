@@ -95,16 +95,16 @@ function tryGetCoreConfig(): OrmConfig | null {
 		// biome-ignore lint/suspicious/noExplicitAny: Bun internal API
 		const moduleCache = (globalThis as any).__bun?.moduleCache;
 		if (moduleCache?.[coreModuleId]) {
-			const coreModule = moduleCache[coreModuleId].exports;
 			// Check if there's a way to access config stores
 			// Note: getBunaryConfig() throws in v0.0.6+, so we skip it
+			// No global config access in new API - config stores are instance-scoped
 		}
 
 		// Method 3: Try import.meta.require (Bun runtime feature)
 		try {
 			// @ts-ignore - Bun runtime feature
-			const coreModule = import.meta.require?.(coreModuleId);
-			// No global config access in new API
+			import.meta.require?.(coreModuleId);
+			// No global config access in new API - config stores are instance-scoped
 		} catch {
 			// import.meta.require not available or failed
 		}
@@ -112,8 +112,8 @@ function tryGetCoreConfig(): OrmConfig | null {
 		// Method 4: Try __require (Bun's internal require)
 		try {
 			// @ts-ignore - Bun internal
-			const coreModule = __require?.(coreModuleId);
-			// No global config access in new API
+			__require?.(coreModuleId);
+			// No global config access in new API - config stores are instance-scoped
 		} catch {
 			// __require not available or failed
 		}
@@ -121,8 +121,8 @@ function tryGetCoreConfig(): OrmConfig | null {
 		// Method 5: Try regular require (works in some contexts)
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const coreModule = require(coreModuleId);
-			// No global config access in new API
+			require(coreModuleId);
+			// No global config access in new API - config stores are instance-scoped
 		} catch {
 			// require not available or failed
 		}
