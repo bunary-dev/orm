@@ -462,22 +462,37 @@ setOrmConfig({
 // Create a table
 Schema.createTable("users", (table) => {
   table.increments("id");
-  table.text("name");
-  table.text("email").unique();
-  table.boolean("active");
+  table.string("name", 255).notNull();
+  table.string("email", 255).unique().notNull();
+  table.boolean("active").default(true);
+  table.timestamp("deleted_at").nullable();
   table.timestamps();
 });
 
-// Alter a table (add columns)
-Schema.table("users", (table) => {
-  table.text("phone");
-});
+// Check if table/column exists
+if (!Schema.hasTable("users")) {
+  Schema.createTable("users", (table) => { /* ... */ });
+}
+if (!Schema.hasColumn("users", "phone")) {
+  Schema.table("users", (table) => {
+    table.string("phone", 20).nullable();
+  });
+}
+
+// Rename a table
+Schema.renameTable("users", "accounts");
 
 // Drop a table
 Schema.dropTable("users");
 ```
 
-**TableBuilder methods:** `increments("id")`, `integer("col")`, `text("col")`, `boolean("col")`, `timestamps()`, `unique("col")` / `unique(["a", "b"])`, `index("col")` / `index(["a", "b"])`. Use `text("col").unique()` for a unique text column.
+**Schema methods:** `createTable(name, callback)`, `dropTable(name)`, `table(name, callback)` (alter), `hasTable(name)`, `hasColumn(table, column)`, `renameTable(oldName, newName)`.
+
+**Column types:** `increments("id")`, `integer("col")`, `text("col")`, `string("col", length?)`, `boolean("col")`, `timestamp("col")`, `foreignId("col")`, `timestamps()`.
+
+**Column modifiers:** `.nullable()`, `.notNull()`, `.default(value)`, `.unique()`, `.primary()`.
+
+**Constraints:** `unique(["a", "b"])`, `index(["a", "b"])`, `foreign("col").references("table", "column")`, `foreignId("col").references("table", "column")`.
 
 ### Migrations Repository
 
