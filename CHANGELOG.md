@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.10] - 2026-01-29
+
+### Added
+
+- **Migrations repository** - Track applied migrations and support rollback
+  - `MigrationsRepository` - Ensures `migrations` table, logs applied migrations by name and batch
+  - `ensureTable()` - Create migrations table if missing (idempotent)
+  - `log(name, batch)` - Record an applied migration
+  - `listApplied()` - List all applied migrations ordered by id
+  - `getNextBatchNumber()` - Next batch number (max(batch)+1 or 1)
+  - `getLastBatch()` - Migrations in the last batch
+  - `deleteLog(name)` - Remove one migration record (rollback single)
+  - `deleteBatch(batch)` - Remove all records in a batch (rollback batch)
+  - `MigrationRecord` type exported
+  - SQLite-compatible; uses configured driver
+
 ## [0.0.9] - 2026-01-29
 
 ### Added

@@ -160,6 +160,32 @@ Schema.dropTable("users");
 
 TableBuilder: `increments("id")`, `integer()`, `text()`, `boolean()`, `timestamps()`, `unique()`, `index()`.
 
+## Migrations Repository
+
+Track which migrations have been applied. Ensures a `migrations` table, records applied migrations by name and batch, and supports listing and rollback.
+
+```ts
+import { MigrationsRepository, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" },
+  },
+});
+
+const repo = new MigrationsRepository();
+repo.ensureTable();
+
+repo.log("20260101000000_create_users", repo.getNextBatchNumber());
+const applied = repo.listApplied();
+
+repo.deleteLog("20260101000000_create_users");
+repo.deleteBatch(2);
+```
+
+API: `ensureTable()`, `log(name, batch)`, `listApplied()`, `getNextBatchNumber()`, `getLastBatch()`, `deleteLog(name)`, `deleteBatch(batch)`.
+
 ## Requirements
 
 - Bun ≥ 1.0.0
