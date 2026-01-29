@@ -335,4 +335,151 @@ describe("BaseModel", () => {
 			expect(count).toBe(3);
 		});
 	});
+
+	describe("UUID primary keys", () => {
+		beforeAll(() => {
+			// Create a table with UUID primary key
+			const db = new Database(testDbPath);
+			db.exec(`
+				CREATE TABLE uuid_users (
+					id TEXT PRIMARY KEY,
+					name TEXT NOT NULL,
+					email TEXT NOT NULL
+				);
+
+				INSERT INTO uuid_users (id, name, email) VALUES
+					('550e8400-e29b-41d4-a716-446655440000', 'Alice', 'alice@example.com'),
+					('660e8400-e29b-41d4-a716-446655440001', 'Bob', 'bob@example.com');
+			`);
+			db.close();
+		});
+
+		it("should find records by UUID", async () => {
+			class UuidUsers extends BaseModel {
+				protected static tableName = "uuid_users";
+				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+			}
+
+			const user = await UuidUsers.find("550e8400-e29b-41d4-a716-446655440000");
+			expect(user).not.toBeNull();
+			expect(user?.name).toBe("Alice");
+			expect(user?.email).toBe("alice@example.com");
+		});
+
+		it("should create records with auto-generated UUID", async () => {
+			class UuidUsers extends BaseModel {
+				protected static tableName = "uuid_users";
+				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+			}
+
+			const user = await UuidUsers.create({
+				name: "Charlie",
+				email: "charlie@example.com",
+			});
+
+			expect(user.id).toBeDefined();
+			expect(typeof user.id).toBe("string");
+			// UUID v7 format: 8-4-4-4-12 hex characters
+			expect(user.id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
+			expect(user.name).toBe("Charlie");
+			expect(user.email).toBe("charlie@example.com");
+
+			// Verify it was actually saved
+			const userId = user.id as string;
+			const found = await UuidUsers.find(userId);
+			expect(found).not.toBeNull();
+			expect(found?.name).toBe("Charlie");
+		});
+
+		it("should use provided UUID if given", async () => {
+			class UuidUsers extends BaseModel {
+				protected static tableName = "uuid_users";
+				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+			}
+
+			const customId = "770e8400-e29b-41d4-a716-446655440002";
+			const user = await UuidUsers.create({
+				id: customId,
+				name: "David",
+				email: "david@example.com",
+			});
+
+			expect(user.id).toBe(customId);
+			expect(user.name).toBe("David");
+		});
+
+		it("should default to UUID primary key type", async () => {
+			class UuidUsers extends BaseModel {
+				protected static tableName = "uuid_users";
+				// primaryKeyType not set, should default to "uuid"
+			}
+
+			const user = await UuidUsers.create({
+				name: "Eve",
+				email: "eve@example.com",
+			});
+
+			expect(user.id).toBeDefined();
+			expect(typeof user.id).toBe("string");
+			expect(user.id).toMatch(
+				/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+			);
+		});
+
+		it("should support custom primary key name", async () => {
+			// Create table with custom primary key name
+			const db = new Database(testDbPath);
+			db.exec(`
+				CREATE TABLE custom_pk_users (
+					uuid TEXT PRIMARY KEY,
+					name TEXT NOT NULL
+				);
+			`);
+			db.close();
+
+			class CustomPkUsers extends BaseModel {
+				protected static tableName = "custom_pk_users";
+				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+				protected static primaryKeyName = "uuid";
+			}
+
+			const user = await CustomPkUsers.create({
+				name: "Frank",
+			});
+
+			expect(user.uuid).toBeDefined();
+			expect(typeof user.uuid).toBe("string");
+			expect(user.name).toBe("Frank");
+		});
+
+		it("should support integer primary keys when explicitly set", async () => {
+			// Create table with integer primary key
+			const db = new Database(testDbPath);
+			db.exec(`
+				CREATE TABLE int_users (
+					id INTEGER PRIMARY KEY AUTOINCREMENT,
+					name TEXT NOT NULL
+				);
+			`);
+			db.close();
+
+			class IntUsers extends BaseModel {
+				protected static tableName = "int_users";
+				protected static primaryKeyType: "uuid" | "integer" = "integer";
+			}
+
+			// For integer primary keys, we need to provide the ID or let SQLite auto-increment
+			// Since SQLite auto-increment requires INSERT without specifying id,
+			// we'll test that create() works without auto-generating UUID
+			const user = await IntUsers.create({
+				id: 1,
+				name: "Grace",
+			});
+
+			expect(user.id).toBe(1);
+			expect(user.name).toBe("Grace");
+		});
+	});
 });

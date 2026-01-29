@@ -61,6 +61,30 @@ export abstract class BaseModel {
 	protected static timestamps?: boolean | string[];
 
 	/**
+	 * Primary key type configuration
+	 * - `"uuid"` - Use UUID primary keys (default)
+	 * - `"integer"` - Use integer primary keys
+	 *
+	 * @example
+	 * ```ts
+	 * protected static primaryKeyType = "uuid"; // Use UUIDs
+	 * protected static primaryKeyType = "integer"; // Use integers
+	 * ```
+	 */
+	protected static primaryKeyType?: "uuid" | "integer";
+
+	/**
+	 * Primary key column name
+	 * Defaults to "id"
+	 *
+	 * @example
+	 * ```ts
+	 * protected static primaryKeyName = "uuid"; // Use "uuid" as primary key column
+	 * ```
+	 */
+	protected static primaryKeyName?: string;
+
+	/**
 	 * Get a query builder instance for this model's table
 	 * Automatically applies protected fields and timestamps exclusion
 	 */
@@ -232,6 +256,7 @@ export abstract class BaseModel {
 
 	/**
 	 * Find a record by ID
+	 * Uses the model's primary key name (defaults to "id")
 	 */
 	static async find(id: string | number): Promise<ModelData | null> {
 		// In TypeScript, 'this' in static methods refers to the class the method was called on.
@@ -239,7 +264,11 @@ export abstract class BaseModel {
 		// This is the correct behavior for Eloquent-like inheritance and is required for the API.
 		// Biome's noThisInStatic rule is disabled in biome.json for this legitimate use case.
 		const modelClass = this as unknown as BaseModelConstructor;
-		const result = await BaseModel.queryForModel(modelClass).find(id);
+		const primaryKeyName = BaseModel.getPrimaryKeyName(modelClass);
+		// Use where() instead of find() to support custom primary key names
+		const result = await BaseModel.queryForModel(modelClass)
+			.where(primaryKeyName, id)
+			.first();
 		return BaseModel.applyExclusionsForModel(modelClass, result);
 	}
 
@@ -332,5 +361,84 @@ export abstract class BaseModel {
 	static async count(): Promise<number> {
 		const modelClass = this as unknown as BaseModelConstructor;
 		return BaseModel.queryForModel(modelClass).count();
+	}
+
+	/**
+	 * Get the primary key type for this model
+	 * Defaults to "uuid"
+	 */
+	protected static getPrimaryKeyType(
+		modelClass: BaseModelConstructor,
+	): "uuid" | "integer" {
+		return modelClass.primaryKeyType ?? "uuid";
+	}
+
+	/**
+	 * Get the primary key column name for this model
+	 * Defaults to "id"
+	 */
+	protected static getPrimaryKeyName(modelClass: BaseModelConstructor): string {
+		return modelClass.primaryKeyName ?? "id";
+	}
+
+	/**
+	 * Create a new record
+	 * Auto-generates UUID if primaryKeyType is "uuid" and id not provided
+	 *
+	 * @param data - Record data
+	 * @returns Created record with auto-generated ID
+	 *
+	 * @example
+	 * ```ts
+	 * const user = await Users.create({
+	 *   name: "John Doe",
+	 *   email: "john@example.com"
+	 * });
+	 * // user.id is auto-generated UUID
+	 * ```
+	 */
+	static async create(data: Record<string, unknown>): Promise<ModelData> {
+		const modelClass = this as unknown as BaseModelConstructor;
+		const primaryKeyType = BaseModel.getPrimaryKeyType(modelClass);
+		const primaryKeyName = BaseModel.getPrimaryKeyName(modelClass);
+
+		// Auto-generate UUID if primaryKeyType is "uuid" and id not provided
+		if (
+			primaryKeyType === "uuid" &&
+			!data[primaryKeyName] &&
+			typeof data[primaryKeyName] !== "string"
+		) {
+			data[primaryKeyName] = Bun.randomUUIDv7();
+		}
+
+		// Insert into database
+		const driver = await import("./connection.js").then((m) => m.getDriver());
+		const columns = Object.keys(data);
+		const values = Object.values(data);
+		const placeholders = columns.map(() => "?").join(", ");
+		const quotedColumns = columns
+			.map((col) => `"${col.replace(/"/g, '""')}"`)
+			.join(", ");
+
+		const sql = `INSERT INTO "${modelClass.tableName.replace(/"/g, '""')}" (${quotedColumns}) VALUES (${placeholders})`;
+		driver.exec(sql, ...values);
+
+		// Fetch the created record using BaseModel.find() which respects primaryKeyName
+		const createdId = data[primaryKeyName];
+		if (typeof createdId !== "string" && typeof createdId !== "number") {
+			throw new Error(
+				`Primary key ${primaryKeyName} must be string or number, got ${typeof createdId}`,
+			);
+		}
+		// Use BaseModel.find() which respects the primary key name
+		const result = await (
+			BaseModel.find as (id: string | number) => Promise<ModelData | null>
+		).call(modelClass, createdId);
+		if (!result) {
+			throw new Error(
+				`Failed to retrieve created record with ${primaryKeyName}=${createdId}`,
+			);
+		}
+		return result;
 	}
 }

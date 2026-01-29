@@ -333,5 +333,32 @@ describe("Schema Builder", () => {
 			const fkInfo = driver.query("PRAGMA foreign_key_list(products)").all();
 			expect(fkInfo.length).toBeGreaterThan(0);
 		});
+
+		it("should support uuid() column type", () => {
+			Schema.createTable("uuid_test", (table) => {
+				table.uuid("id").primary();
+				table.string("name", 255);
+			});
+
+			const driver = getDriver();
+			const info = driver.query("PRAGMA table_info(uuid_test)").all();
+			const idCol = info.find((c) => (c as { name: string }).name === "id");
+			expect(idCol).toBeDefined();
+			expect((idCol as { type: string }).type).toBe("TEXT");
+			expect((idCol as { pk: number }).pk).toBe(1);
+		});
+
+		it("should support uuid() with default name 'id'", () => {
+			Schema.createTable("uuid_default", (table) => {
+				table.uuid().primary();
+				table.string("name", 255);
+			});
+
+			const driver = getDriver();
+			const info = driver.query("PRAGMA table_info(uuid_default)").all();
+			const idCol = info.find((c) => (c as { name: string }).name === "id");
+			expect(idCol).toBeDefined();
+			expect((idCol as { type: string }).type).toBe("TEXT");
+		});
 	});
 });

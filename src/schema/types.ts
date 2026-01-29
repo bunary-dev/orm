@@ -48,6 +48,9 @@ export interface TableBuilder {
 	/** Timestamp column (stored as TEXT in SQLite) */
 	timestamp(name: string): ColumnBuilder & TableBuilder;
 
+	/** UUID column (stored as TEXT in SQLite, defaults to "id") */
+	uuid(name?: string): ColumnBuilder & TableBuilder;
+
 	/** Foreign key column (integer) */
 	foreignId(name: string): ColumnBuilder & TableBuilder & ForeignKeyBuilder;
 
