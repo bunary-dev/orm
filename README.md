@@ -578,21 +578,60 @@ await migrator.down();
 await migrator.down({ steps: 2 });
 ```
 
-**Migration file format:** Each migration file must export `up()` and `down()` functions:
+**Migration file format:** Each migration file must export `up()` and `down()` functions. Use the Schema Builder for type-safe table definitions:
 
 ```typescript
 // database/migrations/20260101000000_create_users.ts
-import { getDriver } from "@bunary/orm";
+import { Schema } from "@bunary/orm";
 
 export async function up() {
-  const driver = getDriver();
-  driver.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+  Schema.createTable("users", (table) => {
+    table.uuid("id").primary();
+    table.string("name", 255).notNull();
+    table.string("email", 255).unique().notNull();
+    table.boolean("active").default(true);
+    table.timestamps();
+  });
+
+  Schema.createTable("posts", (table) => {
+    table.uuid("id").primary();
+    table.foreignId("user_id").references("users", "id");
+    table.string("title", 255).notNull();
+    table.text("content").nullable();
+    table.timestamps();
+  });
 }
 
 export async function down() {
-  const driver = getDriver();
-  driver.exec("DROP TABLE users");
+  Schema.dropTable("posts");
+  Schema.dropTable("users");
 }
+```
+
+**Complete migration workflow example:**
+
+```typescript
+import { createMigrator, Schema, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" }
+  }
+});
+
+// Create migrator instance
+const migrator = createMigrator({ migrationsPath: "./database/migrations" });
+
+// Check migration status
+const status = await migrator.status();
+console.log(`Ran: ${status.ran.length}, Pending: ${status.pending.length}`);
+
+// Run all pending migrations
+await migrator.up();
+
+// Rollback last batch if needed
+await migrator.down();
 ```
 
 **API:** `createMigrator(options?)`, `migrator.status()`, `migrator.up()`, `migrator.down({ steps? })`. Migrations run in transactions - if any migration fails, all changes are rolled back.
