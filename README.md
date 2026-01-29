@@ -419,6 +419,26 @@ const result = driver.query("SELECT * FROM users WHERE id = ?", 1);
 const user = result.get();
 ```
 
+### Driver Connection Management
+
+The ORM caches driver instances for connection reuse. `getDriver()` returns the same driver instance when called multiple times with the same configuration, reducing connection overhead.
+
+```typescript
+import { getDriver, closeDriver, resetDriver } from "@bunary/orm";
+
+// Get driver (cached after first call)
+const driver1 = getDriver();
+const driver2 = getDriver(); // Returns same instance as driver1
+
+// Explicitly close the cached driver
+closeDriver(); // Closes connection and clears cache
+
+// Reset cache without closing (useful for testing)
+resetDriver(); // Clears cache, next getDriver() creates new instance
+```
+
+**Note:** The driver cache is automatically invalidated when the configuration changes, ensuring you always get a driver matching the current config.
+
 ## Requirements
 
 - Bun ≥ 1.0.0

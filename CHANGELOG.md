@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.7] - 2026-01-29
+
+### Fixed
+
+- **Driver Connection Reuse** - `getDriver()` now caches and reuses driver instances
+  - Repeated calls to `getDriver()` return the same driver instance for the same config
+  - Reduces connection overhead and enables transaction coordination
+  - Cache automatically invalidates when configuration changes
+  - Added `closeDriver()` to explicitly close the cached driver connection
+  - Added `resetDriver()` to clear cache without closing (useful for testing)
+
+### Changed
+
+- `getDriver()` now caches driver instances based on configuration hash
+- Driver cache is automatically cleared when `setOrmConfig()` is called with different config
+
 ## [0.0.6] - 2026-01-29
 
 ### Added

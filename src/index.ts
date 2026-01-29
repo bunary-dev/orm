@@ -56,6 +56,8 @@ export {
 	getDriver,
 	registerDriver,
 	clearDriverRegistry,
+	closeDriver,
+	resetDriver,
 	type DriverFactory,
 } from "./connection.js";
 

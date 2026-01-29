@@ -66,6 +66,26 @@ setOrmConfig({
 
 Registered drivers take precedence over built-in drivers, allowing you to override default implementations if needed.
 
+## Driver Connection Management
+
+The ORM caches driver instances for connection reuse. `getDriver()` returns the same driver instance when called multiple times with the same configuration, reducing connection overhead.
+
+```ts
+import { getDriver, closeDriver, resetDriver } from "@bunary/orm";
+
+// Get driver (cached after first call)
+const driver1 = getDriver();
+const driver2 = getDriver(); // Returns same instance as driver1
+
+// Explicitly close the cached driver
+closeDriver(); // Closes connection and clears cache
+
+// Reset cache without closing (useful for testing)
+resetDriver(); // Clears cache, next getDriver() creates new instance
+```
+
+The driver cache is automatically invalidated when the configuration changes, ensuring you always get a driver matching the current config.
+
 ## Requirements
 
 - Bun ≥ 1.0.0

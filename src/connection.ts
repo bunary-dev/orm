@@ -114,7 +114,87 @@ export function createDriver(config: DatabaseConfig): DatabaseDriver {
 }
 
 /**
+ * Cached driver instance
+ */
+let cachedDriver: DatabaseDriver | null = null;
+
+/**
+ * Cached config hash for change detection
+ */
+let cachedConfigHash: string | null = null;
+
+/**
+ * Generate a hash from database config for change detection
+ *
+ * @param config - Database configuration
+ * @returns Hash string representing the config
+ */
+function hashConfig(config: DatabaseConfig): string {
+	// Simple hash based on config properties
+	// For SQLite, use path; for MySQL, use connection string components
+	if (config.type === "sqlite") {
+		return `sqlite:${config.sqlite?.path || ""}`;
+	}
+	if (config.type === "mysql") {
+		const mysql = config.mysql;
+		return `mysql:${mysql?.host || ""}:${mysql?.port || ""}:${mysql?.user || ""}:${mysql?.database || ""}`;
+	}
+	// For custom types, use type + JSON stringify
+	return `${config.type}:${JSON.stringify(config)}`;
+}
+
+/**
+ * Close the cached driver instance
+ *
+ * Closes the currently cached driver and clears the cache.
+ * After calling this, the next `getDriver()` call will create a new driver instance.
+ *
+ * @example
+ * ```ts
+ * import { getDriver, closeDriver } from "@bunary/orm";
+ *
+ * const driver = getDriver();
+ * // ... use driver ...
+ * closeDriver(); // Explicitly close the cached driver
+ * ```
+ */
+export function closeDriver(): void {
+	if (cachedDriver) {
+		cachedDriver.close();
+		cachedDriver = null;
+		cachedConfigHash = null;
+	}
+}
+
+/**
+ * Reset the cached driver instance without closing it
+ *
+ * Clears the cache so the next `getDriver()` call will create a new driver instance.
+ * Unlike `closeDriver()`, this does not close the existing driver connection.
+ * Useful for testing or when you want to force a new connection.
+ *
+ * @example
+ * ```ts
+ * import { getDriver, resetDriver } from "@bunary/orm";
+ *
+ * const driver1 = getDriver();
+ * resetDriver(); // Clear cache
+ * const driver2 = getDriver(); // Creates new instance
+ * ```
+ */
+export function resetDriver(): void {
+	cachedDriver = null;
+	cachedConfigHash = null;
+}
+
+/**
  * Get the current database driver from global configuration
+ *
+ * Returns a cached driver instance if the configuration hasn't changed.
+ * Creates a new driver instance if:
+ * - No driver is cached
+ * - Configuration has changed
+ * - Previous driver was closed/reset
  *
  * @returns Database driver instance
  * @throws If ORM is not configured
@@ -127,5 +207,22 @@ export function createDriver(config: DatabaseConfig): DatabaseDriver {
  */
 export function getDriver(): DatabaseDriver {
 	const config = getOrmConfig();
-	return createDriver(config.database);
+	const configHash = hashConfig(config.database);
+
+	// Return cached driver if config hasn't changed
+	if (cachedDriver && cachedConfigHash === configHash) {
+		return cachedDriver;
+	}
+
+	// Close previous driver if config changed
+	if (cachedDriver && cachedConfigHash !== configHash) {
+		cachedDriver.close();
+		cachedDriver = null;
+	}
+
+	// Create and cache new driver
+	cachedDriver = createDriver(config.database);
+	cachedConfigHash = configHash;
+
+	return cachedDriver;
 }
