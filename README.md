@@ -479,6 +479,37 @@ Schema.dropTable("users");
 
 **TableBuilder methods:** `increments("id")`, `integer("col")`, `text("col")`, `boolean("col")`, `timestamps()`, `unique("col")` / `unique(["a", "b"])`, `index("col")` / `index(["a", "b"])`. Use `text("col").unique()` for a unique text column.
 
+### Migrations Repository
+
+Track which migrations have been applied using `MigrationsRepository`. It ensures a `migrations` table exists, records applied migrations by name and batch, and supports listing and rollback.
+
+```typescript
+import { MigrationsRepository, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" }
+  }
+});
+
+const repo = new MigrationsRepository();
+repo.ensureTable(); // Create migrations table if missing (idempotent)
+
+// Run a migration, then log it
+// ... execute migration SQL ...
+repo.log("20260101000000_create_users", repo.getNextBatchNumber());
+
+// List applied migrations (ordered by id)
+const applied = repo.listApplied();
+
+// Rollback: delete one migration record or a whole batch
+repo.deleteLog("20260101000000_create_users");
+repo.deleteBatch(2); // Remove all migrations in batch 2
+```
+
+**API:** `ensureTable()`, `log(name, batch)`, `listApplied()`, `getNextBatchNumber()`, `getLastBatch()`, `deleteLog(name)`, `deleteBatch(batch)`.
+
 ## Advanced Usage
 
 ### Direct Driver Access
