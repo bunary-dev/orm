@@ -56,30 +56,38 @@ Model → Query Builder → Database Driver → Database
 
 The ORM can be configured in two ways:
 
-### Option 1: Using @bunary/core (Recommended)
+### Option 1: Using @bunary/core (Optional)
 
 Configure the ORM alongside your app configuration using `@bunary/core`:
 
 ```typescript
-import { defineConfig } from "@bunary/core";
+import { createConfig, defineConfig } from "@bunary/core";
 
-defineConfig({
-  app: {
-    name: "MyApp",
-    env: "development",
-  },
-  orm: {
-    database: {
-      type: "sqlite",
-      sqlite: {
-        path: "./database.sqlite"
+// Create a config store
+const configStore = createConfig(
+  defineConfig({
+    app: {
+      name: "MyApp",
+      env: "development",
+    },
+    orm: {
+      database: {
+        type: "sqlite",
+        sqlite: {
+          path: "./database.sqlite"
+        }
       }
     }
-  }
-});
+  })
+);
+
+// Make config store available globally for ORM to access
+globalThis.__bunaryCoreConfigStore = configStore;
 ```
 
-The ORM will automatically read its configuration from `@bunary/core` when no explicit config is set.
+The ORM will automatically read its configuration from `@bunary/core` when a config store is available and no explicit config is set.
+
+**Note:** `@bunary/core` is an optional peer dependency. Install it only if you want to use the integrated configuration approach.
 
 ### Option 2: Using setOrmConfig()
 
