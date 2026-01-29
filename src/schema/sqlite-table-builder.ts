@@ -90,6 +90,7 @@ export class SqliteTableBuilder implements TableBuilder {
 			string: (n: string) => self.string(n),
 			boolean: (n: string) => self.boolean(n),
 			timestamp: (n: string) => self.timestamp(n),
+			uuid: (n?: string) => self.uuid(n),
 			foreignId: (n: string) => self.foreignId(n),
 			timestamps: () => self.timestamps(),
 			uniqueConstraint: (c: string | string[]) => self.unique(c),
@@ -137,6 +138,12 @@ export class SqliteTableBuilder implements TableBuilder {
 	}
 
 	timestamp(name: string): ColumnBuilder & TableBuilder {
+		const col: ColumnDef = { name, sql: `${this.quote(name)} TEXT` };
+		this.columns.push(col);
+		return this.createColumnBuilder(col);
+	}
+
+	uuid(name = "id"): ColumnBuilder & TableBuilder {
 		const col: ColumnDef = { name, sql: `${this.quote(name)} TEXT` };
 		this.columns.push(col);
 		return this.createColumnBuilder(col);

@@ -160,11 +160,32 @@ Schema.dropTable("users");
 
 Schema methods: `createTable()`, `dropTable()`, `table()` (alter), `hasTable()`, `hasColumn()`, `renameTable()`.
 
-Column types: `increments()`, `integer()`, `text()`, `string()`, `boolean()`, `timestamp()`, `foreignId()`, `timestamps()`.
+Column types: `increments()`, `integer()`, `text()`, `string()`, `boolean()`, `timestamp()`, `uuid()`, `foreignId()`, `timestamps()`.
 
 Modifiers: `.nullable()`, `.notNull()`, `.default()`, `.unique()`, `.primary()`.
 
 Constraints: `unique()`, `index()`, `foreign().references()`.
+
+## UUID Primary Keys
+
+UUID-first approach with auto-generation using `Bun.randomUUIDv7()`:
+
+```ts
+class Users extends BaseModel {
+  protected static tableName = "users";
+  protected static primaryKeyType: "uuid" | "integer" = "uuid"; // Default
+  protected static primaryKeyName = "id"; // Default
+}
+
+// Create record (UUID auto-generated)
+const user = await Users.create({ name: "John", email: "john@example.com" });
+
+// Migration
+Schema.createTable("users", (table) => {
+  table.uuid("id").primary();
+  table.string("name", 255).notNull();
+});
+```
 
 ## Migrations Repository
 

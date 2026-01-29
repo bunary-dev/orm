@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.13] - 2026-01-29
+
+### Added
+
+- **UUID-First Primary Key Support** - UUID v7 primary keys with auto-generation
+  - `BaseModel.create(data)` - Create records with auto-generated UUID v7 (using `Bun.randomUUIDv7()`)
+  - `primaryKeyType: "uuid" | "integer"` - Configure primary key type (defaults to "uuid")
+  - `primaryKeyName` - Configure primary key column name (defaults to "id")
+  - `BaseModel.find()` - Now respects custom primary key names
+  - `Schema.uuid(name?)` - Create UUID column in migrations (defaults to "id")
+  - UUIDs stored as TEXT in SQLite
+  - Backward compatible - models can still use integer primary keys
+  - Full test coverage (6 UUID tests, 2 Schema uuid tests)
+
 ## [0.0.12] - 2026-01-29
 
 ### Added
