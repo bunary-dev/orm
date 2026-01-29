@@ -276,9 +276,7 @@ describe("Schema Builder", () => {
 
 			const driver = getDriver();
 			const info = driver.query("PRAGMA table_info(string_test)").all();
-			const nameCol = info.find(
-				(c) => (c as { name: string }).name === "name",
-			);
+			const nameCol = info.find((c) => (c as { name: string }).name === "name");
 			expect(nameCol).toBeDefined();
 			expect((nameCol as { type: string }).type).toBe("TEXT");
 		});
@@ -332,9 +330,7 @@ describe("Schema Builder", () => {
 			});
 
 			const driver = getDriver();
-			const fkInfo = driver
-				.query("PRAGMA foreign_key_list(products)")
-				.all();
+			const fkInfo = driver.query("PRAGMA foreign_key_list(products)").all();
 			expect(fkInfo.length).toBeGreaterThan(0);
 		});
 	});

@@ -35,8 +35,11 @@ export class SqliteTableBuilder implements TableBuilder {
 	private columns: ColumnDef[] = [];
 	private indexes: IndexDef[] = [];
 	private uniqueConstraints: string[][] = [];
-	private foreignKeys: Array<{ column: string; table: string; refColumn: string }> =
-		[];
+	private foreignKeys: Array<{
+		column: string;
+		table: string;
+		refColumn: string;
+	}> = [];
 	private isAlter = false;
 	private tableName = "";
 
@@ -93,7 +96,9 @@ export class SqliteTableBuilder implements TableBuilder {
 			index: (c: string | string[]) => self.index(c),
 			foreign: (c: string) => self.foreign(c),
 		};
-		return builder as unknown as ColumnBuilder & TableBuilder & ForeignKeyBuilder;
+		return builder as unknown as ColumnBuilder &
+			TableBuilder &
+			ForeignKeyBuilder;
 	}
 
 	increments(name: string): TableBuilder {

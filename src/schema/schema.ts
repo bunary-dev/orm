@@ -184,9 +184,7 @@ export const Schema = {
 		const db = driver ?? getDriver();
 		const quotedTable = `"${table.replace(/"/g, '""')}"`;
 		const info = db.query(`PRAGMA table_info(${quotedTable})`).all();
-		return info.some(
-			(col: { name?: string }) => col.name === column,
-		);
+		return info.some((col: { name?: string }) => col.name === column);
 	},
 
 	/**
@@ -201,11 +199,7 @@ export const Schema = {
 	 * Schema.renameTable("users", "accounts");
 	 * ```
 	 */
-	renameTable(
-		oldName: string,
-		newName: string,
-		driver?: DatabaseDriver,
-	): void {
+	renameTable(oldName: string, newName: string, driver?: DatabaseDriver): void {
 		const db = driver ?? getDriver();
 		const quotedOld = `"${oldName.replace(/"/g, '""')}"`;
 		const quotedNew = `"${newName.replace(/"/g, '""')}"`;
