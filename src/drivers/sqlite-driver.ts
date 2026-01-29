@@ -67,42 +67,59 @@ export class SqliteDriver implements DatabaseDriver {
 	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {
 		// Create a transaction-scoped driver instance
 		const txDriver = new SqliteTransactionDriver(this.db, false);
-		const result = fn(txDriver);
 
-		// Check if result is a Promise (async callback)
-		if (result instanceof Promise) {
-			// For async callbacks, we need to manually handle BEGIN/COMMIT/ROLLBACK
-			// because Bun's transaction() doesn't properly await async callbacks
+		// Check if function is async by calling it and checking the result
+		// But we need to start the transaction BEFORE executing operations
+		// So we'll use a wrapper approach
+		const executeInTransaction = (): Promise<T> => {
 			return new Promise<T>((resolve, reject) => {
-				// Begin transaction
+				// Begin transaction FIRST
 				this.db.exec("BEGIN TRANSACTION");
 				this.inTransaction = true;
 
-				result
-					.then((value) => {
-						// Commit on success
+				try {
+					// Now execute the callback
+					const result = fn(txDriver);
+
+					// Check if result is a Promise (async callback)
+					if (result instanceof Promise) {
+						result
+							.then((value) => {
+								// Commit on success
+								this.db.exec("COMMIT");
+								this.inTransaction = false;
+								resolve(value);
+							})
+							.catch((error) => {
+								// Rollback on error
+								try {
+									this.db.exec("ROLLBACK");
+								} catch {
+									// Ignore rollback errors
+								}
+								this.inTransaction = false;
+								reject(error);
+							});
+					} else {
+						// Sync callback - commit and resolve
 						this.db.exec("COMMIT");
 						this.inTransaction = false;
-						resolve(value);
-					})
-					.catch((error) => {
-						// Rollback on error
-						try {
-							this.db.exec("ROLLBACK");
-						} catch {
-							// Ignore rollback errors
-						}
-						this.inTransaction = false;
-						reject(error);
-					});
+						resolve(result);
+					}
+				} catch (error) {
+					// Sync error - rollback and reject
+					try {
+						this.db.exec("ROLLBACK");
+					} catch {
+						// Ignore rollback errors
+					}
+					this.inTransaction = false;
+					reject(error);
+				}
 			});
-		}
+		};
 
-		// For sync callbacks, use Bun's transaction() method
-		// It automatically handles BEGIN, COMMIT, and ROLLBACK
-		return this.db.transaction(() => {
-			return result;
-		})();
+		return executeInTransaction();
 	}
 
 	close(): void {
@@ -130,7 +147,7 @@ class SqliteTransactionDriver implements DatabaseDriver {
 	private static globalSavepointCounter = 0;
 	private inTransaction: boolean;
 
-	constructor(db: Database, inTransaction: boolean = false) {
+	constructor(db: Database, inTransaction = false) {
 		this.db = db;
 		this.inTransaction = inTransaction;
 	}

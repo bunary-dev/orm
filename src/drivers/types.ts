@@ -54,9 +54,7 @@ export interface DatabaseDriver {
 	 * });
 	 * ```
 	 */
-	transaction<T>(
-		fn: (tx: DatabaseDriver) => Promise<T> | T,
-	): Promise<T>;
+	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T>;
 
 	/**
 	 * Close the database connection
