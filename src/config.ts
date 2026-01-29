@@ -71,46 +71,40 @@ export function setOrmConfig(config: OrmConfig): void {
  * @throws If configuration has not been set
  */
 function tryGetCoreConfig(): OrmConfig | null {
-	// Try to get from core config
-	// This works if core has been loaded and defineConfig() has been called
+	// Try to get from core config store
+	// This works if core has been loaded and a config store is available
 	try {
-		// Method 1: Try global registry (set by @bunary/core when loaded)
+		const coreModuleId = "@bunary/core";
+
+		// Method 1: Try global config store (set by apps using createConfig)
 		// biome-ignore lint/suspicious/noExplicitAny: Global registry for cross-package access
-		const coreRegistry = (globalThis as any).__bunaryCoreConfig;
-		if (coreRegistry?.getConfig) {
-			const coreConfig = coreRegistry.getConfig();
-			if (coreConfig?.orm) {
-				coreConfigCache = coreConfig.orm;
-				return coreConfig.orm;
+		const globalStore = (globalThis as any).__bunaryCoreConfigStore;
+		if (globalStore?.get) {
+			try {
+				const coreConfig = globalStore.get();
+				if (coreConfig?.orm) {
+					coreConfigCache = coreConfig.orm;
+					return coreConfig.orm;
+				}
+			} catch {
+				// Config store not initialized yet
 			}
 		}
 
 		// Method 2: Try Bun's module cache (fastest, works if core already loaded)
 		// biome-ignore lint/suspicious/noExplicitAny: Bun internal API
 		const moduleCache = (globalThis as any).__bun?.moduleCache;
-		const coreModuleId = "@bunary/core";
 		if (moduleCache?.[coreModuleId]) {
-			const coreModule = moduleCache[coreModuleId].exports;
-			if (coreModule?.getBunaryConfig) {
-				const coreConfig = coreModule.getBunaryConfig();
-				if (coreConfig?.orm) {
-					coreConfigCache = coreConfig.orm;
-					return coreConfig.orm;
-				}
-			}
+			// Check if there's a way to access config stores
+			// Note: getBunaryConfig() throws in v0.0.6+, so we skip it
+			// No global config access in new API - config stores are instance-scoped
 		}
 
 		// Method 3: Try import.meta.require (Bun runtime feature)
 		try {
 			// @ts-ignore - Bun runtime feature
-			const coreModule = import.meta.require?.(coreModuleId);
-			if (coreModule?.getBunaryConfig) {
-				const coreConfig = coreModule.getBunaryConfig();
-				if (coreConfig?.orm) {
-					coreConfigCache = coreConfig.orm;
-					return coreConfig.orm;
-				}
-			}
+			import.meta.require?.(coreModuleId);
+			// No global config access in new API - config stores are instance-scoped
 		} catch {
 			// import.meta.require not available or failed
 		}
@@ -118,14 +112,8 @@ function tryGetCoreConfig(): OrmConfig | null {
 		// Method 4: Try __require (Bun's internal require)
 		try {
 			// @ts-ignore - Bun internal
-			const coreModule = __require?.(coreModuleId);
-			if (coreModule?.getBunaryConfig) {
-				const coreConfig = coreModule.getBunaryConfig();
-				if (coreConfig?.orm) {
-					coreConfigCache = coreConfig.orm;
-					return coreConfig.orm;
-				}
-			}
+			__require?.(coreModuleId);
+			// No global config access in new API - config stores are instance-scoped
 		} catch {
 			// __require not available or failed
 		}
@@ -133,14 +121,8 @@ function tryGetCoreConfig(): OrmConfig | null {
 		// Method 5: Try regular require (works in some contexts)
 		try {
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
-			const coreModule = require(coreModuleId);
-			if (coreModule?.getBunaryConfig) {
-				const coreConfig = coreModule.getBunaryConfig();
-				if (coreConfig?.orm) {
-					coreConfigCache = coreConfig.orm;
-					return coreConfig.orm;
-				}
-			}
+			require(coreModuleId);
+			// No global config access in new API - config stores are instance-scoped
 		} catch {
 			// require not available or failed
 		}
