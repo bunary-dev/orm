@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.6] - 2026-01-29
+
+### Added
+
+- **Driver Registry API** - Extension point for third-party database providers
+  - `registerDriver(type, factory)` - Register custom database driver factories
+  - `DriverFactory` type - Type definition for driver factory functions
+  - `clearDriverRegistry()` - Clear all registered drivers (useful for testing)
+  - Registered drivers take precedence over built-in drivers
+  - Allows third-party packages to add support for additional database types (e.g., PostgreSQL, Supabase) without modifying core code
+  - Example: `registerDriver("postgres", (config) => new PostgresDriver(config.postgres!))`
+
+### Changed
+
+- `createDriver()` now checks the driver registry before falling back to built-in drivers
+- Improved error message for unsupported database types to suggest using `registerDriver()`
+
 ## [0.0.2] - 2026-01-26
 
 ### Added

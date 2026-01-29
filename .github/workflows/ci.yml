@@ -1,5 +1,10 @@
 name: CI
 
+# CI uses latest Bun version to catch issues early.
+# Developers should keep local Bun updated: `bun upgrade`
+# Check outdated packages: `bun outdated`
+# Update specific package: `bun update [package]`
+
 on:
   push:
     branches: [main]
