@@ -445,6 +445,40 @@ await driver.transaction(async (tx) => {
 });
 ```
 
+### Schema Builder (Migrations)
+
+The ORM provides a schema builder for creating and altering tables (SQLite):
+
+```typescript
+import { Schema, setOrmConfig } from "@bunary/orm";
+
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" }
+  }
+});
+
+// Create a table
+Schema.createTable("users", (table) => {
+  table.increments("id");
+  table.text("name");
+  table.text("email").unique();
+  table.boolean("active");
+  table.timestamps();
+});
+
+// Alter a table (add columns)
+Schema.table("users", (table) => {
+  table.text("phone");
+});
+
+// Drop a table
+Schema.dropTable("users");
+```
+
+**TableBuilder methods:** `increments("id")`, `integer("col")`, `text("col")`, `boolean("col")`, `timestamps()`, `unique("col")` / `unique(["a", "b"])`, `index("col")` / `index(["a", "b"])`. Use `text("col").unique()` for a unique text column.
+
 ## Advanced Usage
 
 ### Direct Driver Access
