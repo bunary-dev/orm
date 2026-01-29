@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.11] - 2026-01-29
+
+### Added
+
+- **Migrator runner** - Discover and run migrations with rollback support
+  - `createMigrator(options?)` - Create migrator instance with optional migrations path
+  - `migrator.status()` - Get status (ran vs pending migrations)
+  - `migrator.up()` - Run all pending migrations in order (uses transactions)
+  - `migrator.down({ steps? })` - Rollback last batch or N batches (reverse order)
+  - Discovers migration files from directory (`.ts` files)
+  - Migration modules export `up()` and `down()` async functions
+  - Uses transactions - failed migrations rollback all changes
+  - Skips already-applied migrations automatically
+  - Rollback runs `down()` in reverse order for each batch
+  - Full test coverage (11 tests)
+
 ## [0.0.10] - 2026-01-29
 
 ### Added
