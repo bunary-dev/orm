@@ -28,10 +28,10 @@ setOrmConfig({
 // Models use the configured database automatically
 const user = await Model.table("users").find(1);
 const users = await Model.table("users").all();
-const users = await Model.table("users")
+const usersWithColumns = await Model.table("users")
   .select("id", "name", "email")
   .all();
-const users = await Model.table("users")
+const usersWithoutPassword = await Model.table("users")
   .exclude("password")
   .all();
 ```
