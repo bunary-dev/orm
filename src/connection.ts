@@ -9,7 +9,68 @@ import type { DatabaseDriver } from "./drivers/types.js";
 import type { DatabaseConfig } from "./types.js";
 
 /**
+ * Factory function that creates a database driver from configuration
+ *
+ * @param config - Database configuration
+ * @returns Database driver instance
+ *
+ * @example
+ * ```ts
+ * const factory: DriverFactory = (config) => {
+ *   return new CustomDriver(config);
+ * };
+ * ```
+ */
+export type DriverFactory = (config: DatabaseConfig) => DatabaseDriver;
+
+/**
+ * Driver registry for third-party database providers
+ *
+ * Maps database type strings to driver factory functions.
+ * This allows third-party packages to register custom drivers
+ * without modifying core @bunary/orm code.
+ */
+const driverRegistry = new Map<string, DriverFactory>();
+
+/**
+ * Register a custom database driver factory
+ *
+ * Allows third-party packages to register custom drivers for database types.
+ * Registered drivers take precedence over built-in drivers.
+ *
+ * @param type - Database type identifier (e.g., "postgres", "custom")
+ * @param factory - Factory function that creates a driver from config
+ * @throws If factory is not a function
+ *
+ * @example
+ * ```ts
+ * import { registerDriver } from "@bunary/orm";
+ *
+ * registerDriver("postgres", (config) => {
+ *   return new PostgresDriver(config.postgres!);
+ * });
+ * ```
+ */
+export function registerDriver(type: string, factory: DriverFactory): void {
+	if (typeof factory !== "function") {
+		throw new Error(`Driver factory must be a function, got ${typeof factory}`);
+	}
+	driverRegistry.set(type, factory);
+}
+
+/**
+ * Clear all registered drivers (useful for testing)
+ *
+ * @internal
+ */
+export function clearDriverRegistry(): void {
+	driverRegistry.clear();
+}
+
+/**
  * Create a database driver based on configuration
+ *
+ * Checks the driver registry first, then falls back to built-in drivers.
  *
  * @param config - Database configuration
  * @returns Database driver instance
@@ -24,6 +85,13 @@ import type { DatabaseConfig } from "./types.js";
  * ```
  */
 export function createDriver(config: DatabaseConfig): DatabaseDriver {
+	// Check registry first (allows third-party drivers and overrides)
+	const registeredFactory = driverRegistry.get(config.type);
+	if (registeredFactory) {
+		return registeredFactory(config);
+	}
+
+	// Fall back to built-in drivers
 	if (config.type === "sqlite") {
 		if (!config.sqlite?.path) {
 			throw new Error(
@@ -41,7 +109,7 @@ export function createDriver(config: DatabaseConfig): DatabaseDriver {
 	}
 
 	throw new Error(
-		`Database type "${config.type}" is not supported. Supported types: sqlite (mysql and postgres coming soon)`,
+		`Database type "${config.type}" is not supported. Supported types: sqlite (mysql and postgres coming soon). Register a custom driver using registerDriver() for other types.`,
 	);
 }
 

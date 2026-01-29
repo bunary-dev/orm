@@ -372,6 +372,39 @@ The MySQL driver structure is in place. To implement:
 
 PostgreSQL support will follow the same pattern as MySQL.
 
+### Custom Drivers (Third-Party Registry)
+
+Third-party packages can register custom database drivers using the driver registry API:
+
+```typescript
+import { registerDriver, createDriver, type DriverFactory } from "@bunary/orm";
+import type { DatabaseConfig, DatabaseDriver } from "@bunary/orm";
+
+// Define your custom driver
+class PostgresDriver implements DatabaseDriver {
+  // ... implement DatabaseDriver interface
+}
+
+// Register the driver factory
+const factory: DriverFactory = (config: DatabaseConfig) => {
+  return new PostgresDriver(config.postgres!);
+};
+
+registerDriver("postgres", factory);
+
+// Now you can use it in your config
+setOrmConfig({
+  database: {
+    type: "postgres",
+    postgres: {
+      // your postgres config
+    }
+  }
+});
+```
+
+**Note:** Registered drivers take precedence over built-in drivers, allowing you to override default implementations if needed.
+
 ## Advanced Usage
 
 ### Direct Driver Access

@@ -1,6 +1,6 @@
 {
   "name": "@bunary/orm",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "ORM for Bunary - a Bun-first backend framework inspired by Laravel",
   "type": "module",
   "main": "./dist/index.js",

@@ -51,7 +51,13 @@ export {
 } from "./config.js";
 
 // Connection Management
-export { createDriver, getDriver } from "./connection.js";
+export {
+	createDriver,
+	getDriver,
+	registerDriver,
+	clearDriverRegistry,
+	type DriverFactory,
+} from "./connection.js";
 
 // Model
 export { Model } from "./model.js";
