@@ -38,6 +38,25 @@ export interface DatabaseDriver {
 	exec(sql: string, ...params: unknown[]): number;
 
 	/**
+	 * Execute operations within a transaction
+	 *
+	 * Automatically begins a transaction, executes the callback, and commits on success.
+	 * If the callback throws an error, the transaction is rolled back.
+	 *
+	 * @param fn - Callback function that receives a transaction-scoped driver instance
+	 * @returns Promise resolving to the return value of the callback
+	 *
+	 * @example
+	 * ```ts
+	 * await driver.transaction(async (tx) => {
+	 *   tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
+	 *   tx.exec("INSERT INTO users (name) VALUES (?)", "Bob");
+	 * });
+	 * ```
+	 */
+	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T>;
+
+	/**
 	 * Close the database connection
 	 */
 	close(): void;

@@ -405,6 +405,46 @@ setOrmConfig({
 
 **Note:** Registered drivers take precedence over built-in drivers, allowing you to override default implementations if needed.
 
+### Transactions
+
+The ORM supports database transactions for atomic operations:
+
+```typescript
+import { getDriver } from "@bunary/orm";
+
+const driver = getDriver();
+
+// Execute operations in a transaction
+await driver.transaction(async (tx) => {
+  tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
+  tx.exec("INSERT INTO users (name) VALUES (?)", "Bob");
+  // If any operation fails, all changes are rolled back
+});
+
+// Transactions automatically commit on success or rollback on error
+try {
+  await driver.transaction(async (tx) => {
+    tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
+    throw new Error("Something went wrong");
+    // This will automatically rollback
+  });
+} catch (error) {
+  // Transaction was rolled back
+}
+
+// Nested transactions use savepoints
+await driver.transaction(async (tx) => {
+  tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
+  
+  await tx.transaction(async (tx2) => {
+    tx2.exec("INSERT INTO users (name) VALUES (?)", "Bob");
+    // Nested transaction (savepoint)
+  });
+  
+  // Both commits if successful, or both rollback on error
+});
+```
+
 ## Advanced Usage
 
 ### Direct Driver Access

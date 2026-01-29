@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.8] - 2026-01-29
+
+### Added
+
+- **Transaction Support** - Database transactions for atomic operations
+  - `transaction(fn)` method on `DatabaseDriver` interface
+  - Automatic commit on success, rollback on error
+  - Support for both async and sync transaction callbacks
+  - Nested transactions via SQLite savepoints
+  - Implemented in `SqliteDriver` with full test coverage (8 tests)
+  - Essential for safe migrations and multi-step operations
+
+### Changed
+
+- `DatabaseDriver` interface now includes `transaction()` method
+- All drivers must implement transaction support
+
 ## [0.0.7] - 2026-01-29
 
 ### Fixed

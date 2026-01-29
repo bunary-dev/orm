@@ -73,6 +73,11 @@ export class MysqlDriver implements DatabaseDriver {
 		throw new Error("MySQL driver not implemented");
 	}
 
+	transaction<T>(_fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {
+		// TODO: Implement MySQL transaction support
+		throw new Error("MySQL driver not implemented");
+	}
+
 	close(): void {
 		// TODO: Close MySQL connection
 		throw new Error("MySQL driver not implemented");
