@@ -128,7 +128,9 @@ await driver.transaction(async (tx) => {
 
 ## Schema Builder (Migrations)
 
-DDL for creating and altering tables (SQLite):
+DDL for creating and altering tables (SQLite). Use in migration files for type-safe schema definitions.
+
+### Creating Tables
 
 ```ts
 import { Schema, setOrmConfig } from "@bunary/orm";
@@ -140,31 +142,107 @@ setOrmConfig({
   },
 });
 
-// Create a table
+// Create a table with UUID primary key
 Schema.createTable("users", (table) => {
-  table.increments("id");
-  table.text("name");
-  table.text("email").unique();
-  table.boolean("active");
+  table.uuid("id").primary();
+  table.string("name", 255).notNull();
+  table.string("email", 255).unique().notNull();
+  table.boolean("active").default(true);
+  table.timestamp("deleted_at").nullable();
   table.timestamps();
 });
 
-// Alter a table (add columns)
+// Create table with integer primary key
+Schema.createTable("posts", (table) => {
+  table.increments("id");
+  table.string("title", 255).notNull();
+  table.text("content").nullable();
+  table.foreignId("user_id").references("users", "id");
+  table.timestamps();
+});
+```
+
+### Altering Tables
+
+```ts
+// Add columns to existing table
 Schema.table("users", (table) => {
-  table.text("phone");
+  table.string("phone", 20).nullable();
+  table.string("address", 255).nullable();
 });
 
-// Drop a table
+// Check before altering
+if (!Schema.hasColumn("users", "phone")) {
+  Schema.table("users", (table) => {
+    table.string("phone", 20).nullable();
+  });
+}
+```
+
+### Table Management
+
+```ts
+// Check if table exists
+if (!Schema.hasTable("users")) {
+  Schema.createTable("users", (table) => {
+    // ...
+  });
+}
+
+// Rename table
+Schema.renameTable("users", "accounts");
+
+// Drop table
 Schema.dropTable("users");
 ```
 
+### Column Types
+
+- `increments("id")` - Auto-incrementing integer primary key
+- `integer("col")` - Integer column
+- `text("col")` - Text column
+- `string("col", length?)` - String column (alias for text)
+- `boolean("col")` - Boolean (stored as INTEGER in SQLite)
+- `timestamp("col")` - Timestamp (stored as TEXT)
+- `uuid("id"?)` - UUID column (defaults to "id")
+- `foreignId("col")` - Foreign key column (INTEGER, NOT NULL)
+- `timestamps()` - Adds `createdAt` and `updatedAt` columns
+
+### Column Modifiers
+
+Chain modifiers on column types:
+
+```ts
+table.string("email", 255)
+  .unique()        // Add UNIQUE constraint
+  .notNull()       // Make NOT NULL
+  .default("");    // Set default value
+
+table.integer("age")
+  .nullable()      // Make nullable
+  .default(0);    // Set default
+
+table.uuid("id")
+  .primary();      // Set as primary key
+```
+
+### Constraints
+
+```ts
+// Composite unique constraint
+table.unique(["email", "username"]);
+
+// Index
+table.index("email");
+table.index(["user_id", "created_at"]);
+
+// Foreign key
+table.foreign("user_id").references("users", "id");
+// Or shorthand:
+table.foreignId("user_id").references("users", "id");
+```
+
 Schema methods: `createTable()`, `dropTable()`, `table()` (alter), `hasTable()`, `hasColumn()`, `renameTable()`.
-
-Column types: `increments()`, `integer()`, `text()`, `string()`, `boolean()`, `timestamp()`, `uuid()`, `foreignId()`, `timestamps()`.
-
-Modifiers: `.nullable()`, `.notNull()`, `.default()`, `.unique()`, `.primary()`.
-
-Constraints: `unique()`, `index()`, `foreign().references()`.
 
 ## UUID Primary Keys
 
@@ -218,7 +296,7 @@ API: `ensureTable()`, `log(name, batch)`, `listApplied()`, `getNextBatchNumber()
 Run and rollback migrations. Discovers migration files, runs pending migrations in order, and supports rollback. Uses transactions for safety.
 
 ```ts
-import { createMigrator, setOrmConfig } from "@bunary/orm";
+import { createMigrator, Schema, setOrmConfig } from "@bunary/orm";
 
 setOrmConfig({
   database: {
@@ -229,26 +307,83 @@ setOrmConfig({
 
 const migrator = createMigrator({ migrationsPath: "./database/migrations" });
 
+// Check status
 const status = await migrator.status();
+console.log(`Ran: ${status.ran.length}, Pending: ${status.pending.length}`);
+
+// Run all pending migrations
 await migrator.up();
+
+// Rollback last batch
 await migrator.down();
+
+// Rollback multiple batches
 await migrator.down({ steps: 2 });
 ```
 
-Migration files export `up()` and `down()`:
+### Migration File Format
+
+Migration files export `up()` and `down()` functions. Use Schema Builder for type-safe table definitions:
 
 ```ts
-import { getDriver } from "@bunary/orm";
+// database/migrations/20260101000000_create_users.ts
+import { Schema } from "@bunary/orm";
 
 export async function up() {
-  const driver = getDriver();
-  driver.exec("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+  Schema.createTable("users", (table) => {
+    table.uuid("id").primary();
+    table.string("name", 255).notNull();
+    table.string("email", 255).unique().notNull();
+    table.boolean("active").default(true);
+    table.timestamps();
+  });
+
+  Schema.createTable("posts", (table) => {
+    table.uuid("id").primary();
+    table.foreignId("user_id").references("users", "id");
+    table.string("title", 255).notNull();
+    table.text("content").nullable();
+    table.timestamps();
+  });
 }
 
 export async function down() {
-  const driver = getDriver();
-  driver.exec("DROP TABLE users");
+  Schema.dropTable("posts");
+  Schema.dropTable("users");
 }
+```
+
+### Complete Migration Workflow
+
+```ts
+import { createMigrator, Schema, setOrmConfig } from "@bunary/orm";
+
+// 1. Configure database
+setOrmConfig({
+  database: {
+    type: "sqlite",
+    sqlite: { path: "./database.sqlite" },
+  },
+});
+
+// 2. Create migrator
+const migrator = createMigrator({ migrationsPath: "./database/migrations" });
+
+// 3. Check status
+const status = await migrator.status();
+if (status.pending.length > 0) {
+  console.log(`Running ${status.pending.length} pending migrations...`);
+  
+  // 4. Run migrations
+  await migrator.up();
+  
+  console.log("Migrations completed!");
+} else {
+  console.log("No pending migrations");
+}
+
+// 5. Rollback if needed
+// await migrator.down(); // Rollback last batch
 ```
 
 API: `createMigrator(options?)`, `migrator.status()`, `migrator.up()`, `migrator.down({ steps? })`.
