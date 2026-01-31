@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- First minor release — API stable for production use
+- First minor release — API stable for development use until 1.0.0
 
 ### Changed
 
