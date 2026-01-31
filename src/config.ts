@@ -102,7 +102,6 @@ function tryGetCoreConfig(): OrmConfig | null {
 
 		// Method 3: Try import.meta.require (Bun runtime feature)
 		try {
-			// @ts-ignore - Bun runtime feature
 			import.meta.require?.(coreModuleId);
 			// No global config access in new API - config stores are instance-scoped
 		} catch {
@@ -111,7 +110,7 @@ function tryGetCoreConfig(): OrmConfig | null {
 
 		// Method 4: Try __require (Bun's internal require)
 		try {
-			// @ts-ignore - Bun internal
+			// @ts-expect-error - Bun internal
 			__require?.(coreModuleId);
 			// No global config access in new API - config stores are instance-scoped
 		} catch {

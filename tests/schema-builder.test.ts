@@ -2,7 +2,7 @@
  * Schema Builder Tests
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Schema, getDriver, resetDriver, setOrmConfig } from "../src/index.js";
+import { getDriver, resetDriver, Schema, setOrmConfig } from "../src/index.js";
 
 describe("Schema Builder", () => {
 	const testDbPath = `/tmp/test-schema-${Date.now()}.sqlite`;
