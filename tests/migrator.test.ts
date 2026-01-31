@@ -3,8 +3,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
-	MigrationsRepository,
 	getDriver,
+	MigrationsRepository,
 	resetDriver,
 	setOrmConfig,
 } from "../src/index.js";

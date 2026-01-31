@@ -6,7 +6,7 @@ import { Database } from "bun:sqlite";
  * Verifies the abstraction layer works end-to-end
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { Model, createDriver, getDriver, setOrmConfig } from "../src/index.js";
+import { createDriver, getDriver, Model, setOrmConfig } from "../src/index.js";
 import type { DatabaseConfig, OrmConfig } from "../src/types.js";
 
 describe("ORM Integration - Full Flow", () => {
