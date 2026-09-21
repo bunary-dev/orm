@@ -84,7 +84,7 @@ describe("BaseModel", () => {
 
 		it("should work with tableName set", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
+				protected static override tableName = "users";
 			}
 
 			const users = await Users.all();
@@ -95,7 +95,7 @@ describe("BaseModel", () => {
 
 		it("should support find() method", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
+				protected static override tableName = "users";
 			}
 
 			const user = await Users.find(1);
@@ -106,7 +106,7 @@ describe("BaseModel", () => {
 
 		it("should support all() method", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
+				protected static override tableName = "users";
 			}
 
 			const users = await Users.all();
@@ -115,7 +115,7 @@ describe("BaseModel", () => {
 
 		it("should support query builder methods", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
+				protected static override tableName = "users";
 			}
 
 			const users = await Users.where("age", ">", 25).all();
@@ -126,8 +126,8 @@ describe("BaseModel", () => {
 	describe("protected fields", () => {
 		it("should automatically exclude protected fields from all()", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password", "secret_key"];
+				protected static override tableName = "users";
+				protected static override protected = ["password", "secret_key"];
 			}
 
 			const users = await Users.all();
@@ -135,16 +135,16 @@ describe("BaseModel", () => {
 
 			// Check first user doesn't have protected fields
 			const user = users[0];
-			expect(user.password).toBeUndefined();
-			expect(user.secret_key).toBeUndefined();
-			expect(user.name).toBeDefined();
-			expect(user.email).toBeDefined();
+			expect(user?.password).toBeUndefined();
+			expect(user?.secret_key).toBeUndefined();
+			expect(user?.name).toBeDefined();
+			expect(user?.email).toBeDefined();
 		});
 
 		it("should automatically exclude protected fields from find()", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const user = await Users.find(1);
@@ -155,8 +155,8 @@ describe("BaseModel", () => {
 
 		it("should automatically exclude protected fields from first()", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password", "secret_key"];
+				protected static override tableName = "users";
+				protected static override protected = ["password", "secret_key"];
 			}
 
 			const user = await Users.first();
@@ -167,8 +167,8 @@ describe("BaseModel", () => {
 
 		it("should work with empty protected array", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected: string[] = [];
+				protected static override tableName = "users";
+				protected static override protected: string[] = [];
 			}
 
 			const user = await Users.find(1);
@@ -178,7 +178,7 @@ describe("BaseModel", () => {
 
 		it("should work when protected is not set (defaults to empty)", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
+				protected static override tableName = "users";
 				// protected not set
 			}
 
@@ -188,8 +188,8 @@ describe("BaseModel", () => {
 
 		it("should exclude protected fields even when select() is used", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const users = await Users.select("id", "name", "email", "password").all();
@@ -197,17 +197,17 @@ describe("BaseModel", () => {
 
 			// password should still be excluded even though it was in select()
 			const user = users[0];
-			expect(user.password).toBeUndefined();
-			expect(user.id).toBeDefined();
-			expect(user.name).toBeDefined();
+			expect(user?.password).toBeUndefined();
+			expect(user?.id).toBeDefined();
+			expect(user?.name).toBeDefined();
 		});
 	});
 
 	describe("timestamps", () => {
 		it("should exclude default timestamps (createdAt, updatedAt) when timestamps is true", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static timestamps = true;
+				protected static override tableName = "users";
+				protected static override timestamps = true;
 			}
 
 			const user = await Users.find(1);
@@ -218,8 +218,8 @@ describe("BaseModel", () => {
 
 		it("should exclude custom timestamps when timestamps array is provided", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static timestamps = ["createdAt"];
+				protected static override tableName = "users";
+				protected static override timestamps = ["createdAt"];
 			}
 
 			const user = await Users.find(1);
@@ -229,8 +229,8 @@ describe("BaseModel", () => {
 
 		it("should not exclude timestamps when timestamps is false", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static timestamps = false;
+				protected static override tableName = "users";
+				protected static override timestamps = false;
 			}
 
 			const user = await Users.find(1);
@@ -240,7 +240,7 @@ describe("BaseModel", () => {
 
 		it("should default to excluding createdAt and updatedAt when timestamps is not set", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
+				protected static override tableName = "users";
 				// timestamps not set - should default to ["createdAt", "updatedAt"]
 			}
 
@@ -251,23 +251,23 @@ describe("BaseModel", () => {
 
 		it("should exclude timestamps from all()", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static timestamps = true;
+				protected static override tableName = "users";
+				protected static override timestamps = true;
 			}
 
 			const users = await Users.all();
 			expect(users.length).toBe(3);
 
 			const user = users[0];
-			expect(user.createdAt).toBeUndefined();
-			expect(user.updatedAt).toBeUndefined();
+			expect(user?.createdAt).toBeUndefined();
+			expect(user?.updatedAt).toBeUndefined();
 		});
 
 		it("should combine protected fields and timestamps exclusion", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password", "secret_key"];
-				protected static timestamps = true;
+				protected static override tableName = "users";
+				protected static override protected = ["password", "secret_key"];
+				protected static override timestamps = true;
 			}
 
 			const user = await Users.find(1);
@@ -283,52 +283,52 @@ describe("BaseModel", () => {
 	describe("Query builder methods", () => {
 		it("should support select() with protected fields exclusion", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const users = await Users.select("id", "name", "email").all();
 			expect(users.length).toBe(3);
-			expect(users[0].password).toBeUndefined();
+			expect(users[0]?.password).toBeUndefined();
 		});
 
 		it("should support where() with protected fields exclusion", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const users = await Users.where("age", ">", 25).all();
 			expect(users.length).toBe(2);
-			expect(users[0].password).toBeUndefined();
+			expect(users[0]?.password).toBeUndefined();
 		});
 
 		it("should support limit() with protected fields exclusion", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const users = await Users.limit(2).all();
 			expect(users.length).toBe(2);
-			expect(users[0].password).toBeUndefined();
+			expect(users[0]?.password).toBeUndefined();
 		});
 
 		it("should support orderBy() with protected fields exclusion", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const users = await Users.orderBy("name", "asc").all();
 			expect(users.length).toBe(3);
-			expect(users[0].password).toBeUndefined();
+			expect(users[0]?.password).toBeUndefined();
 		});
 
 		it("should support count() (not affected by protected fields)", async () => {
 			class Users extends BaseModel {
-				protected static tableName = "users";
-				protected static protected = ["password"];
+				protected static override tableName = "users";
+				protected static override protected = ["password"];
 			}
 
 			const count = await Users.count();
@@ -356,8 +356,8 @@ describe("BaseModel", () => {
 
 		it("should find records by UUID", async () => {
 			class UuidUsers extends BaseModel {
-				protected static tableName = "uuid_users";
-				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+				protected static override tableName = "uuid_users";
+				protected static override primaryKeyType: "uuid" | "integer" = "uuid";
 			}
 
 			const user = await UuidUsers.find("550e8400-e29b-41d4-a716-446655440000");
@@ -368,8 +368,8 @@ describe("BaseModel", () => {
 
 		it("should create records with auto-generated UUID", async () => {
 			class UuidUsers extends BaseModel {
-				protected static tableName = "uuid_users";
-				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+				protected static override tableName = "uuid_users";
+				protected static override primaryKeyType: "uuid" | "integer" = "uuid";
 			}
 
 			const user = await UuidUsers.create({
@@ -395,8 +395,8 @@ describe("BaseModel", () => {
 
 		it("should use provided UUID if given", async () => {
 			class UuidUsers extends BaseModel {
-				protected static tableName = "uuid_users";
-				protected static primaryKeyType: "uuid" | "integer" = "uuid";
+				protected static override tableName = "uuid_users";
+				protected static override primaryKeyType: "uuid" | "integer" = "uuid";
 			}
 
 			const customId = "770e8400-e29b-41d4-a716-446655440002";
@@ -412,7 +412,7 @@ describe("BaseModel", () => {
 
 		it("should default to UUID primary key type", async () => {
 			class UuidUsers extends BaseModel {
-				protected static tableName = "uuid_users";
+				protected static override tableName = "uuid_users";
 				// primaryKeyType not set, should default to "uuid"
 			}
 
@@ -440,9 +440,9 @@ describe("BaseModel", () => {
 			db.close();
 
 			class CustomPkUsers extends BaseModel {
-				protected static tableName = "custom_pk_users";
-				protected static primaryKeyType: "uuid" | "integer" = "uuid";
-				protected static primaryKeyName = "uuid";
+				protected static override tableName = "custom_pk_users";
+				protected static override primaryKeyType: "uuid" | "integer" = "uuid";
+				protected static override primaryKeyName = "uuid";
 			}
 
 			const user = await CustomPkUsers.create({
@@ -466,8 +466,9 @@ describe("BaseModel", () => {
 			db.close();
 
 			class IntUsers extends BaseModel {
-				protected static tableName = "int_users";
-				protected static primaryKeyType: "uuid" | "integer" = "integer";
+				protected static override tableName = "int_users";
+				protected static override primaryKeyType: "uuid" | "integer" =
+					"integer";
 			}
 
 			// For integer primary keys, we need to provide the ID or let SQLite auto-increment

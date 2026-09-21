@@ -1,0 +1,7 @@
+[test]
+coverage = true
+coverageSkipTestFiles = true
+# Bun enforces coverageThreshold per file, not on the aggregate, so this is
+# bounded by the least-covered file (src/drivers/mysql-driver.ts, a stub).
+# Aggregate coverage is currently 89.36% lines / 78.06% functions.
+coverageThreshold = { lines = 0.5, functions = 0.15 }

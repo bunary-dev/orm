@@ -2,6 +2,8 @@
 
 ORM for Bunary: models, query builder, migrations, driver abstraction (SQLite built-in; register custom drivers). Full reference: [docs/index.md](./docs/index.md).
 
+Requires Bun ≥ 1.4.0.
+
 ## Installation
 
 ```bash

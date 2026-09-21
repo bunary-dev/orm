@@ -108,9 +108,9 @@ describe("Model", () => {
 			const users = await Model.table("users").all();
 
 			expect(users).toHaveLength(3);
-			expect(users[0].name).toBe("John Doe");
-			expect(users[1].name).toBe("Jane Smith");
-			expect(users[2].name).toBe("Bob Wilson");
+			expect(users[0]?.name).toBe("John Doe");
+			expect(users[1]?.name).toBe("Jane Smith");
+			expect(users[2]?.name).toBe("Bob Wilson");
 		});
 
 		it("should return empty array when table is empty", async () => {
@@ -260,8 +260,8 @@ describe("Model", () => {
 			const users = await Model.table("users").limit(2).all();
 
 			expect(users).toHaveLength(2);
-			expect(users[0].name).toBe("John Doe");
-			expect(users[1].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("John Doe");
+			expect(users[1]?.name).toBe("Jane Smith");
 		});
 
 		it("should work with select() and limit()", async () => {
@@ -282,15 +282,15 @@ describe("Model", () => {
 			const users = await Model.table("users").offset(1).all();
 
 			expect(users).toHaveLength(2);
-			expect(users[0].name).toBe("Jane Smith");
-			expect(users[1].name).toBe("Bob Wilson");
+			expect(users[0]?.name).toBe("Jane Smith");
+			expect(users[1]?.name).toBe("Bob Wilson");
 		});
 
 		it("should work with limit() and offset() for pagination", async () => {
 			const users = await Model.table("users").limit(1).offset(1).all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("Jane Smith");
 		});
 	});
 
@@ -299,18 +299,18 @@ describe("Model", () => {
 			const users = await Model.table("users").orderBy("name", "asc").all();
 
 			expect(users).toHaveLength(3);
-			expect(users[0].name).toBe("Bob Wilson");
-			expect(users[1].name).toBe("Jane Smith");
-			expect(users[2].name).toBe("John Doe");
+			expect(users[0]?.name).toBe("Bob Wilson");
+			expect(users[1]?.name).toBe("Jane Smith");
+			expect(users[2]?.name).toBe("John Doe");
 		});
 
 		it("should order results descending through Model API", async () => {
 			const users = await Model.table("users").orderBy("name", "desc").all();
 
 			expect(users).toHaveLength(3);
-			expect(users[0].name).toBe("John Doe");
-			expect(users[1].name).toBe("Jane Smith");
-			expect(users[2].name).toBe("Bob Wilson");
+			expect(users[0]?.name).toBe("John Doe");
+			expect(users[1]?.name).toBe("Jane Smith");
+			expect(users[2]?.name).toBe("Bob Wilson");
 		});
 
 		it("should work with limit() and orderBy()", async () => {
@@ -320,8 +320,8 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(2);
-			expect(users[0].name).toBe("John Doe");
-			expect(users[1].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("John Doe");
+			expect(users[1]?.name).toBe("Jane Smith");
 		});
 	});
 
@@ -330,7 +330,7 @@ describe("Model", () => {
 			const users = await Model.table("users").where("name", "John Doe").all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("John Doe");
+			expect(users[0]?.name).toBe("John Doe");
 		});
 
 		it("should filter with operator through Model API", async () => {
@@ -350,7 +350,7 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("Jane Smith");
 		});
 
 		it("should work with where() and limit()", async () => {
@@ -360,7 +360,7 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).not.toBe("John Doe");
+			expect(users[0]?.name).not.toBe("John Doe");
 		});
 
 		it("should work with where() and orderBy()", async () => {
@@ -370,8 +370,8 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(2);
-			expect(users[0].name).toBe("Bob Wilson");
-			expect(users[1].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("Bob Wilson");
+			expect(users[1]?.name).toBe("Jane Smith");
 		});
 	});
 
@@ -456,7 +456,7 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("Jane Smith");
 		});
 
 		it("should support pagination: limit + offset + orderBy", async () => {
@@ -467,7 +467,7 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("Jane Smith");
+			expect(users[0]?.name).toBe("Jane Smith");
 		});
 
 		it("should support where + select + orderBy + limit", async () => {
@@ -479,7 +479,7 @@ describe("Model", () => {
 				.all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("John Doe");
+			expect(users[0]?.name).toBe("John Doe");
 			expect(users[0]).toHaveProperty("id");
 			expect(users[0]).toHaveProperty("name");
 			expect(users[0]).not.toHaveProperty("email");

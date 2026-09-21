@@ -259,8 +259,7 @@ export class SqliteTableBuilder implements TableBuilder {
 	 */
 	toIndexSql(): string[] {
 		const statements: string[] = [];
-		for (let i = 0; i < this.indexes.length; i++) {
-			const idx = this.indexes[i];
+		for (const idx of this.indexes) {
 			const indexName = `${this.tableName}_${idx.columns.join("_")}_index`;
 			const columns = idx.columns.map((c) => this.quote(c)).join(", ");
 			statements.push(

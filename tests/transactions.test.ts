@@ -32,8 +32,8 @@ describe("Transaction Support", () => {
 			// Verify data was committed
 			const result = driver.query("SELECT * FROM users").all();
 			expect(result).toHaveLength(2);
-			expect(result[0].name).toBe("Alice");
-			expect(result[1].name).toBe("Bob");
+			expect(result[0]?.name).toBe("Alice");
+			expect(result[1]?.name).toBe("Bob");
 		});
 
 		it("should rollback transaction on error", async () => {
