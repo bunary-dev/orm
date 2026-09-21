@@ -85,8 +85,8 @@ describe("MigrationsRepository", () => {
 
 			const rows = repo.listApplied();
 			expect(rows.length).toBe(2);
-			expect(rows[0].batch).toBe(1);
-			expect(rows[1].batch).toBe(1);
+			expect(rows[0]?.batch).toBe(1);
+			expect(rows[1]?.batch).toBe(1);
 		});
 	});
 
@@ -108,8 +108,8 @@ describe("MigrationsRepository", () => {
 			const rows = repo.listApplied();
 			expect(rows.length).toBe(2);
 			// Insertion order: id 1 = "second", id 2 = "first"
-			expect(rows[0].name).toBe("second");
-			expect(rows[1].name).toBe("first");
+			expect(rows[0]?.name).toBe("second");
+			expect(rows[1]?.name).toBe("first");
 		});
 	});
 
@@ -158,7 +158,7 @@ describe("MigrationsRepository", () => {
 			const last = repo.getLastBatch();
 			expect(last.length).toBe(2);
 			expect(last.map((r) => r.name).sort()).toEqual(["b", "c"]);
-			expect(last[0].batch).toBe(2);
+			expect(last[0]?.batch).toBe(2);
 		});
 	});
 
@@ -173,7 +173,7 @@ describe("MigrationsRepository", () => {
 
 			const rows = repo.listApplied();
 			expect(rows.length).toBe(1);
-			expect(rows[0].name).toBe("to_keep");
+			expect(rows[0]?.name).toBe("to_keep");
 		});
 
 		it("should delete all migrations in a batch", () => {
@@ -187,7 +187,7 @@ describe("MigrationsRepository", () => {
 
 			const rows = repo.listApplied();
 			expect(rows.length).toBe(1);
-			expect(rows[0].name).toBe("a");
+			expect(rows[0]?.name).toBe("a");
 		});
 	});
 });

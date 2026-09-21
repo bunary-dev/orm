@@ -60,15 +60,15 @@ describe("limit()", () => {
 			const items = await Model.table("items").limit(2).all();
 
 			expect(items).toHaveLength(2);
-			expect(items[0].name).toBe("Item 1");
-			expect(items[1].name).toBe("Item 2");
+			expect(items[0]?.name).toBe("Item 1");
+			expect(items[1]?.name).toBe("Item 2");
 		});
 
 		it("should limit to 1 result", async () => {
 			const items = await Model.table("items").limit(1).all();
 
 			expect(items).toHaveLength(1);
-			expect(items[0].name).toBe("Item 1");
+			expect(items[0]?.name).toBe("Item 1");
 		});
 
 		it("should return all results when limit is greater than total", async () => {

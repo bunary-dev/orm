@@ -4,6 +4,15 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { createConfig, defineConfig } from "@bunary/core";
 import { clearOrmConfig, getOrmConfig } from "../src/config.js";
+import type { OrmConfig } from "../src/types.js";
+
+// @bunary/core 0.2.0 dropped its built-in `orm` key; packages extend
+// BunaryConfig via module augmentation (see @bunary/core types.d.ts).
+declare module "@bunary/core" {
+	interface BunaryConfig {
+		orm?: OrmConfig;
+	}
+}
 
 describe("Core Integration", () => {
 	beforeEach(() => {

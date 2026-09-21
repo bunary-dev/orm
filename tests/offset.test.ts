@@ -54,17 +54,17 @@ describe("offset()", () => {
 		const items = await Model.table("items").offset(2).all();
 
 		expect(items).toHaveLength(3);
-		expect(items[0].name).toBe("Item 3");
-		expect(items[1].name).toBe("Item 4");
-		expect(items[2].name).toBe("Item 5");
+		expect(items[0]?.name).toBe("Item 3");
+		expect(items[1]?.name).toBe("Item 4");
+		expect(items[2]?.name).toBe("Item 5");
 	});
 
 	it("should work with limit() for pagination", async () => {
 		const items = await Model.table("items").limit(2).offset(2).all();
 
 		expect(items).toHaveLength(2);
-		expect(items[0].name).toBe("Item 3");
-		expect(items[1].name).toBe("Item 4");
+		expect(items[0]?.name).toBe("Item 3");
+		expect(items[1]?.name).toBe("Item 4");
 	});
 
 	it("should return empty array when offset exceeds total", async () => {
@@ -77,7 +77,7 @@ describe("offset()", () => {
 		const items = await Model.table("items").offset(0).all();
 
 		expect(items).toHaveLength(5);
-		expect(items[0].name).toBe("Item 1");
+		expect(items[0]?.name).toBe("Item 1");
 	});
 
 	it("should work with orderBy()", async () => {
@@ -90,14 +90,14 @@ describe("offset()", () => {
 		expect(items).toHaveLength(2);
 		// When ordered DESC: Item 5, Item 4, Item 3, Item 2, Item 1
 		// OFFSET 2 skips Item 5 and Item 4, so we get Item 3 and Item 2
-		expect(items[0].name).toBe("Item 3");
-		expect(items[1].name).toBe("Item 2");
+		expect(items[0]?.name).toBe("Item 3");
+		expect(items[1]?.name).toBe("Item 2");
 	});
 
 	it("should allow chaining multiple offset() calls (last one wins)", async () => {
 		const items = await Model.table("items").offset(1).offset(2).all();
 
 		expect(items).toHaveLength(3);
-		expect(items[0].name).toBe("Item 3");
+		expect(items[0]?.name).toBe("Item 3");
 	});
 });

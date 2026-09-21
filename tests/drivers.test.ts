@@ -44,8 +44,8 @@ describe("Database Drivers", () => {
 			const all = result.all();
 
 			expect(all).toHaveLength(2);
-			expect(all[0].name).toBe("John Doe");
-			expect(all[1].name).toBe("Jane Smith");
+			expect(all[0]?.name).toBe("John Doe");
+			expect(all[1]?.name).toBe("Jane Smith");
 		});
 
 		it("should execute queries with parameters and get single result", () => {

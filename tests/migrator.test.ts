@@ -182,10 +182,10 @@ describe("Migrator", () => {
 			// Verify migrations were logged
 			const applied = repo.listApplied();
 			expect(applied).toHaveLength(2);
-			expect(applied[0].name).toBe("20260101000000_create_users");
-			expect(applied[1].name).toBe("20260102000000_create_posts");
-			expect(applied[0].batch).toBe(1);
-			expect(applied[1].batch).toBe(1);
+			expect(applied[0]?.name).toBe("20260101000000_create_users");
+			expect(applied[1]?.name).toBe("20260102000000_create_posts");
+			expect(applied[0]?.batch).toBe(1);
+			expect(applied[1]?.batch).toBe(1);
 
 			// Verify tables were created
 			const driver = getDriver();
@@ -245,8 +245,8 @@ describe("Migrator", () => {
 			// Only second migration should be logged
 			const applied = repo.listApplied();
 			expect(applied).toHaveLength(2);
-			expect(applied[1].name).toBe("20260102000000_create_posts");
-			expect(applied[1].batch).toBe(2); // New batch
+			expect(applied[1]?.name).toBe("20260102000000_create_posts");
+			expect(applied[1]?.batch).toBe(2); // New batch
 		});
 
 		it("should rollback on migration failure", async () => {

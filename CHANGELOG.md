@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-21
+
+### Changed
+
+- **Requires Bun ≥ 1.4.0** (`engines.bun`); `.bun-version` pins 1.4.2 for CI and contributors (#52)
+- Toolchain: `@types/bun` ^1.4.2 replaces both the pinned `@types/bun` and `bun-types`; `typescript` ^7 and `@biomejs/biome` 2.5.1 pinned as devDependencies; `bun.lock` committed (#52)
+- `tsconfig.json` aligned with Bun 1.4 `bun init` defaults (`module: Preserve`, `moduleDetection: force`, `types: ["bun"]`, `verbatimModuleSyntax`, `noUncheckedIndexedAccess`, `noImplicitOverride`) (#52)
+- Scripts call the installed `tsc`/`biome` binaries instead of `bunx`; added `pack:check` (#52)
+- CI: Bun version read from `.bun-version`, `permissions: contents: read`, `actions/checkout@v7`, a new `build` job that runs `bun pm pack --dry-run`, and a non-required `bun latest` canary job (#52)
+- Coverage collected and thresholded via `bunfig.toml` (#52)
+
+### Fixed
+
+- `bun run typecheck` was failing on `main`: `@bunary/core` 0.2.0 extends `BunaryConfig` by module augmentation, which nothing declared (#52)
+- `exports["."]` now lists `types` before `import` so TypeScript resolves the declarations; added `default` condition and `./package.json` subpath (#48)
+- Added `publishConfig.access: public` and `sideEffects: false` (#48)
+- Added missing `LICENSE` file (MIT) to the repo and the published tarball (#52)
+- `SqliteTableBuilder.toIndexSql()` iterates indexes directly instead of indexing by position (#52)
+
 ## [0.1.0] - 2026-01-31
 
 ### Added

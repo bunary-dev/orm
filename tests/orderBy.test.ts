@@ -53,18 +53,18 @@ describe("orderBy()", () => {
 		const products = await Model.table("products").orderBy("name").all();
 
 		expect(products).toHaveLength(3);
-		expect(products[0].name).toBe("Apple");
-		expect(products[1].name).toBe("Banana");
-		expect(products[2].name).toBe("Zebra");
+		expect(products[0]?.name).toBe("Apple");
+		expect(products[1]?.name).toBe("Banana");
+		expect(products[2]?.name).toBe("Zebra");
 	});
 
 	it("should order by column ascending (explicit)", async () => {
 		const products = await Model.table("products").orderBy("name", "asc").all();
 
 		expect(products).toHaveLength(3);
-		expect(products[0].name).toBe("Apple");
-		expect(products[1].name).toBe("Banana");
-		expect(products[2].name).toBe("Zebra");
+		expect(products[0]?.name).toBe("Apple");
+		expect(products[1]?.name).toBe("Banana");
+		expect(products[2]?.name).toBe("Zebra");
 	});
 
 	it("should order by column descending", async () => {
@@ -73,9 +73,9 @@ describe("orderBy()", () => {
 			.all();
 
 		expect(products).toHaveLength(3);
-		expect(products[0].name).toBe("Zebra");
-		expect(products[1].name).toBe("Banana");
-		expect(products[2].name).toBe("Apple");
+		expect(products[0]?.name).toBe("Zebra");
+		expect(products[1]?.name).toBe("Banana");
+		expect(products[2]?.name).toBe("Apple");
 	});
 
 	it("should order by numeric column", async () => {
@@ -84,9 +84,9 @@ describe("orderBy()", () => {
 			.all();
 
 		expect(products).toHaveLength(3);
-		expect(products[0].price).toBe(10.0);
-		expect(products[1].price).toBe(20.0);
-		expect(products[2].price).toBe(50.0);
+		expect(products[0]?.price).toBe(10.0);
+		expect(products[1]?.price).toBe(20.0);
+		expect(products[2]?.price).toBe(50.0);
 	});
 
 	it("should work with limit()", async () => {
@@ -96,8 +96,8 @@ describe("orderBy()", () => {
 			.all();
 
 		expect(products).toHaveLength(2);
-		expect(products[0].price).toBe(10.0);
-		expect(products[1].price).toBe(20.0);
+		expect(products[0]?.price).toBe(10.0);
+		expect(products[1]?.price).toBe(20.0);
 	});
 
 	it("should work with first()", async () => {
@@ -118,8 +118,8 @@ describe("orderBy()", () => {
 
 		expect(products).toHaveLength(3);
 		// Should be ordered by price desc (last orderBy wins)
-		expect(products[0].price).toBe(50.0);
-		expect(products[1].price).toBe(20.0);
-		expect(products[2].price).toBe(10.0);
+		expect(products[0]?.price).toBe(50.0);
+		expect(products[1]?.price).toBe(20.0);
+		expect(products[2]?.price).toBe(10.0);
 	});
 });

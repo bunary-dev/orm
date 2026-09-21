@@ -57,14 +57,14 @@ describe("where()", () => {
 			const users = await Model.table("users").where("age", 25).all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("John Doe");
+			expect(users[0]?.name).toBe("John Doe");
 		});
 
 		it("should filter with = operator (explicit)", async () => {
 			const users = await Model.table("users").where("age", "=", 25).all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("John Doe");
+			expect(users[0]?.name).toBe("John Doe");
 		});
 
 		it("should filter with > operator", async () => {
@@ -79,7 +79,7 @@ describe("where()", () => {
 			const users = await Model.table("users").where("age", "<", 25).all();
 
 			expect(users).toHaveLength(1);
-			expect(users[0].name).toBe("Bob Wilson");
+			expect(users[0]?.name).toBe("Bob Wilson");
 		});
 
 		it("should filter with >= operator", async () => {
@@ -150,7 +150,7 @@ describe("where()", () => {
 			expect(users.length).toBeGreaterThan(0);
 			// Verify ordering
 			for (let i = 1; i < users.length; i++) {
-				expect((users[i - 1].age as number) <= (users[i].age as number)).toBe(
+				expect((users[i - 1]?.age as number) <= (users[i]?.age as number)).toBe(
 					true,
 				);
 			}

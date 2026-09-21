@@ -66,9 +66,9 @@ describe("ORM Integration - Full Flow", () => {
 			const products = await Model.table("products").all();
 
 			expect(products).toHaveLength(3);
-			expect(products[0].name).toBe("Laptop");
-			expect(products[1].name).toBe("Mouse");
-			expect(products[2].name).toBe("Keyboard");
+			expect(products[0]?.name).toBe("Laptop");
+			expect(products[1]?.name).toBe("Mouse");
+			expect(products[2]?.name).toBe("Keyboard");
 		});
 
 		it("should work with find() through abstraction layer", async () => {

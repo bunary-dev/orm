@@ -676,7 +676,7 @@ resetDriver(); // Clears cache, next getDriver() creates new instance
 
 ## Requirements
 
-- Bun ≥ 1.0.0
+- Bun ≥ 1.4.0
 
 ## License
 
