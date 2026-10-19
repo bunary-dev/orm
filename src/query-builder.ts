@@ -19,6 +19,7 @@ const ALLOWED_OPERATORS = new Set([
 	"NOT LIKE",
 	"IN",
 	"IS",
+	"IS NOT",
 ]);
 
 function assertIdentifier(name: unknown, kind: string): string {
