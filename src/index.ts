@@ -2,7 +2,8 @@
  * @bunary/orm - ORM for Bunary
  *
  * A Bun-first ORM inspired by Laravel Eloquent with database abstraction layer.
- * Supports SQLite (MVP), with MySQL and PostgreSQL coming soon.
+ * Supports SQLite built in; MySQL and PostgreSQL are not implemented
+ * (use registerDriver() for other databases).
  *
  * @example
  * ```ts
@@ -17,19 +18,6 @@
  *     }
  *   }
  * });
- *
- * // Or for MySQL (when implemented):
- * // setOrmConfig({
- * //   database: {
- * //     type: "mysql",
- * //     mysql: {
- * //       host: "localhost",
- * //       user: "root",
- * //       password: "password",
- * //       database: "mydb"
- * //     }
- * //   }
- * // });
  *
  * // Query the database through models
  * const user = await Model.table("users").find(1);
@@ -61,7 +49,7 @@ export {
 	resetDriver,
 } from "./connection.js";
 // Database Drivers
-export { MysqlDriver, SqliteDriver } from "./drivers/index.js";
+export { SqliteDriver } from "./drivers/index.js";
 export type {
 	DatabaseDriver,
 	QueryResult,

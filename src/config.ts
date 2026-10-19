@@ -1,3 +1,4 @@
+import { assertSupportedDatabaseType } from "./connection.js";
 import type { OrmConfig } from "./types.js";
 
 let globalOrmConfig: OrmConfig | null = null;
@@ -25,6 +26,7 @@ let coreConfigCache: OrmConfig | null = null;
  * ```
  */
 export function defineOrmConfig(config: OrmConfig): OrmConfig {
+	assertSupportedDatabaseType(config.database);
 	const validated = {
 		database: {
 			type: config.database.type,
@@ -56,6 +58,7 @@ export function defineOrmConfig(config: OrmConfig): OrmConfig {
  * ```
  */
 export function setOrmConfig(config: OrmConfig): void {
+	assertSupportedDatabaseType(config.database);
 	globalOrmConfig = config;
 	shouldUseCoreConfig = false; // Override core config when explicitly set
 	coreConfigCache = null; // Clear cache when explicitly setting

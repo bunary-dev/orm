@@ -45,7 +45,7 @@ describe("Connection Manager", () => {
 			};
 
 			expect(() => createDriver(config)).toThrow(
-				"MySQL driver is not yet implemented",
+				'Database type "mysql" is not supported. Only SQLite is built in',
 			);
 		});
 
