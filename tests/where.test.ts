@@ -203,9 +203,9 @@ describe("where()", () => {
 
 		it("should apply null handling to count()", async () => {
 			expect(await Model.table("notes").where("body", null).count()).toBe(2);
-			expect(
-				await Model.table("notes").where("body", "!=", null).count(),
-			).toBe(2);
+			expect(await Model.table("notes").where("body", "!=", null).count()).toBe(
+				2,
+			);
 		});
 
 		it("should reject other operators with null", () => {

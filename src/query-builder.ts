@@ -101,14 +101,17 @@ export class QueryBuilderImpl implements QueryBuilder {
 	 */
 	where(
 		column: string,
-		operatorOrValue: string | number | boolean | null,
-		value?: string | number | boolean | null,
+		...args: [
+			operatorOrValue: string | number | boolean | null,
+			value?: string | number | boolean | null,
+		]
 	): QueryBuilder {
+		const [operatorOrValue, value] = args;
 		let operator: string;
 		let conditionValue: unknown;
 
 		// Distinguish a 2-arg call from an explicit undefined third argument
-		if (arguments.length >= 3) {
+		if (args.length >= 2) {
 			if (value === undefined) {
 				throw new Error(
 					`where(): value for column "${column}" is undefined; pass a value or null`,
