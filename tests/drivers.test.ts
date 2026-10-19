@@ -3,7 +3,6 @@
  * Testing the abstraction layer
  */
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { MysqlDriver } from "../src/drivers/mysql-driver.js";
 import { SqliteDriver } from "../src/drivers/sqlite-driver.js";
 import type { DatabaseDriver } from "../src/drivers/types.js";
 
@@ -95,19 +94,6 @@ describe("Database Drivers", () => {
 				`/tmp/bunary-driver-close-test-${Date.now()}.sqlite`,
 			);
 			expect(() => newDriver.close()).not.toThrow();
-		});
-	});
-
-	describe("MysqlDriver", () => {
-		it("should throw error when instantiated (not yet implemented)", () => {
-			expect(() => {
-				new MysqlDriver({
-					host: "localhost",
-					user: "root",
-					password: "password",
-					database: "test",
-				});
-			}).toThrow("MySQL driver is not yet implemented");
 		});
 	});
 

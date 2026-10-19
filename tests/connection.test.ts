@@ -2,8 +2,8 @@
  * Connection Manager Tests
  */
 import { describe, expect, it } from "bun:test";
-import { setOrmConfig } from "../src/config.js";
-import { createDriver, getDriver } from "../src/connection.js";
+import { clearOrmConfig, setOrmConfig } from "../src/config.js";
+import { createDriver, getDriver, resetDriver } from "../src/connection.js";
 import type { DatabaseConfig } from "../src/types.js";
 
 describe("Connection Manager", () => {
@@ -45,7 +45,7 @@ describe("Connection Manager", () => {
 			};
 
 			expect(() => createDriver(config)).toThrow(
-				"MySQL driver is not yet implemented",
+				'Database type "mysql" is not supported. Only SQLite is built in',
 			);
 		});
 
@@ -87,5 +87,27 @@ describe("Connection Manager", () => {
 				expect((error as Error).message).toContain("not set");
 			}
 		});
+	});
+});
+
+describe("core-supplied mysql config", () => {
+	it("is rejected by getDriver() via the @bunary/core config store", () => {
+		const g = globalThis as unknown as Record<string, unknown>;
+		const prev = g.__bunaryCoreConfigStore;
+		clearOrmConfig();
+		resetDriver();
+		g.__bunaryCoreConfigStore = {
+			get: () => ({
+				orm: { database: { type: "mysql", mysql: { host: "h" } } },
+			}),
+		};
+		try {
+			expect(() => getDriver()).toThrow(
+				'Database type "mysql" is not supported. Only SQLite is built in',
+			);
+		} finally {
+			g.__bunaryCoreConfigStore = prev;
+			clearOrmConfig();
+		}
 	});
 });
