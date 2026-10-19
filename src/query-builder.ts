@@ -4,6 +4,45 @@
 import { getDriver } from "./connection.js";
 import type { ModelData, QueryBuilder } from "./types.js";
 
+const IDENTIFIER_PATTERN =
+	/^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$/;
+
+const ALLOWED_OPERATORS = new Set([
+	"=",
+	"!=",
+	"<>",
+	"<",
+	"<=",
+	">",
+	">=",
+	"LIKE",
+	"NOT LIKE",
+	"IN",
+	"IS",
+]);
+
+function assertIdentifier(name: unknown, kind: string): string {
+	if (typeof name !== "string" || !IDENTIFIER_PATTERN.test(name)) {
+		throw new Error(`Invalid ${kind} identifier: ${String(name)}`);
+	}
+	return name;
+}
+
+function assertOperator(operator: string): string {
+	const normalized = operator.trim().replace(/\s+/g, " ").toUpperCase();
+	if (!ALLOWED_OPERATORS.has(normalized)) {
+		throw new Error(`Invalid operator: ${operator}`);
+	}
+	return normalized;
+}
+
+function assertNonNegativeInteger(value: unknown, kind: string): number {
+	if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
+		throw new Error(`${kind} must be a non-negative integer`);
+	}
+	return value;
+}
+
 /**
  * Where condition
  */
@@ -42,7 +81,7 @@ export class QueryBuilderImpl implements QueryBuilder {
 
 	constructor(table: string) {
 		this.state = {
-			table,
+			table: assertIdentifier(table, "table"),
 			whereConditions: [],
 		};
 	}
@@ -54,7 +93,9 @@ export class QueryBuilderImpl implements QueryBuilder {
 		if (!this.state.selectColumns) {
 			this.state.selectColumns = [];
 		}
-		this.state.selectColumns.push(...columns);
+		this.state.selectColumns.push(
+			...columns.map((c) => assertIdentifier(c, "column")),
+		);
 		return this;
 	}
 
@@ -73,7 +114,7 @@ export class QueryBuilderImpl implements QueryBuilder {
 	 * Limit the number of results returned
 	 */
 	limit(count: number): QueryBuilder {
-		this.state.limitCount = count;
+		this.state.limitCount = assertNonNegativeInteger(count, "limit");
 		return this;
 	}
 
@@ -81,7 +122,7 @@ export class QueryBuilderImpl implements QueryBuilder {
 	 * Skip a number of results (for pagination)
 	 */
 	offset(count: number): QueryBuilder {
-		this.state.offsetCount = count;
+		this.state.offsetCount = assertNonNegativeInteger(count, "offset");
 		return this;
 	}
 
@@ -89,8 +130,11 @@ export class QueryBuilderImpl implements QueryBuilder {
 	 * Order results by a column
 	 */
 	orderBy(column: string, direction: "asc" | "desc" = "asc"): QueryBuilder {
+		if (direction !== "asc" && direction !== "desc") {
+			throw new Error(`Invalid orderBy direction: ${String(direction)}`);
+		}
 		this.state.orderByClause = {
-			column,
+			column: assertIdentifier(column, "column"),
 			direction,
 		};
 		return this;
@@ -141,8 +185,8 @@ export class QueryBuilderImpl implements QueryBuilder {
 		}
 
 		this.state.whereConditions.push({
-			column,
-			operator,
+			column: assertIdentifier(column, "column"),
+			operator: assertOperator(operator),
 			value: conditionValue,
 		});
 
