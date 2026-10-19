@@ -3,7 +3,7 @@
  */
 import { Database } from "bun:sqlite";
 import type { ModelData } from "../types.js";
-import type { DatabaseDriver, QueryResult } from "./types.js";
+import type { DatabaseDriver, QueryResult, RunResult } from "./types.js";
 
 /**
  * SQLite query result implementation
@@ -61,6 +61,10 @@ export class SqliteDriver implements DatabaseDriver {
 		this.db.exec(sql);
 		// Return 1 to indicate success
 		return 1;
+	}
+
+	run(sql: string, ...params: unknown[]): RunResult {
+		return this.db.query(sql).run(...(params as never[]));
 	}
 
 	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {
@@ -156,6 +160,10 @@ class SqliteTransactionDriver implements DatabaseDriver {
 		}
 		this.db.exec(sql);
 		return 1;
+	}
+
+	run(sql: string, ...params: unknown[]): RunResult {
+		return this.db.query(sql).run(...(params as never[]));
 	}
 
 	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {

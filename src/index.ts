@@ -62,7 +62,11 @@ export {
 } from "./connection.js";
 // Database Drivers
 export { MysqlDriver, SqliteDriver } from "./drivers/index.js";
-export type { DatabaseDriver, QueryResult } from "./drivers/types.js";
+export type {
+	DatabaseDriver,
+	QueryResult,
+	RunResult,
+} from "./drivers/types.js";
 export type {
 	MigrationModule,
 	MigrationRecord,

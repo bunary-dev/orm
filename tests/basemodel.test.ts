@@ -483,4 +483,66 @@ describe("BaseModel", () => {
 			expect(user.name).toBe("Grace");
 		});
 	});
+
+	describe("create() with integer primary keys", () => {
+		beforeAll(() => {
+			const db = new Database(testDbPath);
+			db.exec(`
+				CREATE TABLE auto_users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL);
+				CREATE TABLE auto_custom (user_id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+			`);
+			db.close();
+		});
+
+		class AutoUsers extends BaseModel {
+			protected static override tableName = "auto_users";
+			protected static override primaryKeyType: "uuid" | "integer" = "integer";
+		}
+
+		const countRows = () => {
+			const db = new Database(testDbPath);
+			const row = db.query("SELECT COUNT(*) AS c FROM auto_users").get() as {
+				c: number;
+			};
+			db.close();
+			return row.c;
+		};
+
+		it("should return the created record using the generated rowid", async () => {
+			const a = await AutoUsers.create({ name: "A" });
+			const b = await AutoUsers.create({ name: "B" });
+			expect(a.id).toBe(1);
+			expect(b.id).toBe(2);
+			expect(b.name).toBe("B");
+		});
+
+		it("should support a custom primaryKeyName", async () => {
+			class AutoCustom extends BaseModel {
+				protected static override tableName = "auto_custom";
+				protected static override primaryKeyType: "uuid" | "integer" =
+					"integer";
+				protected static override primaryKeyName = "user_id";
+			}
+			const u = await AutoCustom.create({ name: "C" });
+			expect(u.user_id).toBe(1);
+			expect(u.name).toBe("C");
+		});
+
+		it("should work inside a transaction", async () => {
+			const { getDriver } = await import("../src/connection.js");
+			const rec = await getDriver().transaction(async () =>
+				AutoUsers.create({ name: "Tx" }),
+			);
+			expect(rec.name).toBe("Tx");
+			expect(typeof rec.id).toBe("number");
+		});
+
+		it("should leave no row behind when create() throws", async () => {
+			const before = countRows();
+			await expect(
+				AutoUsers.create({ id: { bad: true }, name: "X" }),
+			).rejects.toThrow();
+			expect(countRows()).toBe(before);
+		});
+	});
 });

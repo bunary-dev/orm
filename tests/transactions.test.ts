@@ -162,4 +162,21 @@ describe("Transaction Support", () => {
 			expect(final?.count).toBe(2);
 		});
 	});
+
+	describe("run()", () => {
+		it("should return changes and lastInsertRowid", () => {
+			const r = driver.run("INSERT INTO users (name) VALUES (?)", "Al");
+			expect(r.changes).toBe(1);
+			expect(Number(r.lastInsertRowid)).toBe(1);
+		});
+
+		it("should return changes and lastInsertRowid in a transaction", async () => {
+			const r = await driver.transaction((tx) => {
+				tx.run("INSERT INTO users (name) VALUES (?)", "Al");
+				return tx.run("INSERT INTO users (name) VALUES (?)", "Bo");
+			});
+			expect(r.changes).toBe(1);
+			expect(Number(r.lastInsertRowid)).toBe(2);
+		});
+	});
 });

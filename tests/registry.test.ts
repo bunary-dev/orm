@@ -24,6 +24,7 @@ describe("Driver Registry", () => {
 					get: () => null,
 				}),
 				exec: () => 0,
+				run: () => ({ changes: 0, lastInsertRowid: 0 }),
 				transaction: async (fn) => fn(mockDriver),
 				close: () => {},
 			};
@@ -50,6 +51,7 @@ describe("Driver Registry", () => {
 					get: () => ({ id: 1, name: "test" }),
 				}),
 				exec: () => 1,
+				run: () => ({ changes: 1, lastInsertRowid: 0 }),
 				transaction: async (fn) => fn(mockSqliteDriver),
 				close: () => {},
 			};
@@ -87,6 +89,7 @@ describe("Driver Registry", () => {
 					get: () => null,
 				}),
 				exec: () => 0,
+				run: () => ({ changes: 0, lastInsertRowid: 0 }),
 				transaction: async (fn) => fn(customDriver),
 				close: () => {},
 			};
@@ -133,6 +136,7 @@ describe("Driver Registry", () => {
 					get: () => null,
 				}),
 				exec: () => 0,
+				run: () => ({ changes: 0, lastInsertRowid: 0 }),
 				transaction: async (fn) => fn(driver1),
 				close: () => {},
 			};
@@ -143,6 +147,7 @@ describe("Driver Registry", () => {
 					get: () => null,
 				}),
 				exec: () => 0,
+				run: () => ({ changes: 0, lastInsertRowid: 0 }),
 				transaction: async (fn) => fn(driver2),
 				close: () => {},
 			};

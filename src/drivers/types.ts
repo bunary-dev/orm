@@ -20,6 +20,16 @@ export interface QueryResult {
 /**
  * Database driver interface - abstraction for all database types
  */
+/**
+ * Result of executing a write statement
+ */
+export interface RunResult {
+	/** Number of rows changed by the statement */
+	changes: number;
+	/** Row id of the most recent successful INSERT */
+	lastInsertRowid: number | bigint;
+}
+
 export interface DatabaseDriver {
 	/**
 	 * Execute a raw SQL query
@@ -36,6 +46,14 @@ export interface DatabaseDriver {
 	 * @returns Number of affected rows
 	 */
 	exec(sql: string, ...params: unknown[]): number;
+
+	/**
+	 * Execute a raw SQL statement and report its effect
+	 * @param sql - SQL statement
+	 * @param params - Statement parameters
+	 * @returns Number of changed rows and the last inserted row id
+	 */
+	run(sql: string, ...params: unknown[]): RunResult;
 
 	/**
 	 * Execute operations within a transaction
