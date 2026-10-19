@@ -170,4 +170,46 @@ describe("where()", () => {
 			}
 		});
 	});
+	describe("null and undefined values", () => {
+		beforeAll(() => {
+			const db = new Database(testDbPath);
+			db.exec(`
+				CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT);
+				INSERT INTO notes (body) VALUES ('a'), (NULL), ('b'), (NULL);
+			`);
+			db.close();
+		});
+
+		it("should throw on explicit undefined value with three args", () => {
+			expect(() =>
+				Model.table("notes").where("body", ">", undefined as never),
+			).toThrow(/undefined/);
+		});
+
+		it("should use IS NULL for where(col, null)", async () => {
+			const rows = await Model.table("notes").where("body", null).all();
+			expect(rows).toHaveLength(2);
+		});
+
+		it("should use IS NULL for where(col, '=', null)", async () => {
+			const rows = await Model.table("notes").where("body", "=", null).all();
+			expect(rows).toHaveLength(2);
+		});
+
+		it("should use IS NOT NULL for '!=' with null", async () => {
+			const rows = await Model.table("notes").where("body", "!=", null).all();
+			expect(rows).toHaveLength(2);
+		});
+
+		it("should apply null handling to count()", async () => {
+			expect(await Model.table("notes").where("body", null).count()).toBe(2);
+			expect(
+				await Model.table("notes").where("body", "!=", null).count(),
+			).toBe(2);
+		});
+
+		it("should reject other operators with null", () => {
+			expect(() => Model.table("notes").where("body", ">", null)).toThrow();
+		});
+	});
 });

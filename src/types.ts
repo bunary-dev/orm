@@ -106,8 +106,8 @@ export interface QueryBuilder {
 	 */
 	where(
 		column: string,
-		operatorOrValue: string | number | boolean,
-		value?: string | number | boolean,
+		operatorOrValue: string | number | boolean | null,
+		value?: string | number | boolean | null,
 	): QueryBuilder;
 
 	/**
