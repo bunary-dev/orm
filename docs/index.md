@@ -252,7 +252,7 @@ const users = await Model.table("users")
 // Returns all columns except password and secret_key
 ```
 
-#### `where(column: string, operatorOrValue: string | number | boolean, value?: string | number | boolean)`
+#### `where(column: string, operatorOrValue: string | number | boolean | null, value?: string | number | boolean | null)`
 
 Add a where condition to filter results.
 
@@ -266,7 +266,16 @@ const users = await Model.table("users")
 const users = await Model.table("users")
   .where("age", ">", 18)
   .all();
+
+// NULL handling: generates IS NULL / IS NOT NULL
+await Model.table("users").where("deleted_at", null).all();
+await Model.table("users").where("deleted_at", "=", null).all();
+await Model.table("users").where("deleted_at", "!=", null).all();
 ```
+
+Passing `undefined` as the value throws an error (e.g. `where("age", ">", undefined)`),
+and operators other than `=`, `!=` and `<>` cannot be combined with `null`.
+`count()` honours the same conditions.
 
 #### `limit(count: number)`
 

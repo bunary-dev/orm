@@ -19,6 +19,7 @@ const ALLOWED_OPERATORS = new Set([
 	"NOT LIKE",
 	"IN",
 	"IS",
+	"IS NOT",
 ]);
 
 function assertIdentifier(name: unknown, kind: string): string {
@@ -145,20 +146,43 @@ export class QueryBuilderImpl implements QueryBuilder {
 	 */
 	where(
 		column: string,
-		operatorOrValue: string | number | boolean,
-		value?: string | number | boolean,
+		...args: [
+			operatorOrValue: string | number | boolean | null,
+			value?: string | number | boolean | null,
+		]
 	): QueryBuilder {
+		const [operatorOrValue, value] = args;
 		let operator: string;
 		let conditionValue: unknown;
 
-		// If value is provided, operatorOrValue is the operator
-		if (value !== undefined) {
+		// Distinguish a 2-arg call from an explicit undefined third argument
+		if (args.length >= 2) {
+			if (value === undefined) {
+				throw new Error(
+					`where(): value for column "${column}" is undefined; pass a value or null`,
+				);
+			}
 			operator = String(operatorOrValue);
 			conditionValue = value;
 		} else {
-			// Otherwise, operatorOrValue is the value and operator is "="
 			operator = "=";
 			conditionValue = operatorOrValue;
+		}
+
+		if (conditionValue === undefined) {
+			throw new Error(`where(): value for column "${column}" is undefined`);
+		}
+
+		if (conditionValue === null) {
+			if (operator === "=") {
+				operator = "IS";
+			} else if (operator === "!=" || operator === "<>") {
+				operator = "IS NOT";
+			} else {
+				throw new Error(
+					`where(): operator "${operator}" cannot be used with null`,
+				);
+			}
 		}
 
 		this.state.whereConditions.push({
@@ -263,8 +287,12 @@ export class QueryBuilderImpl implements QueryBuilder {
 		if (this.state.whereConditions.length > 0) {
 			const whereClauses: string[] = [];
 			for (const condition of this.state.whereConditions) {
-				whereClauses.push(`${condition.column} ${condition.operator} ?`);
-				params.push(condition.value);
+				if (condition.value === null) {
+					whereClauses.push(`${condition.column} ${condition.operator} NULL`);
+				} else {
+					whereClauses.push(`${condition.column} ${condition.operator} ?`);
+					params.push(condition.value);
+				}
 			}
 			sql += ` WHERE ${whereClauses.join(" AND ")}`;
 		}
@@ -316,8 +344,12 @@ export class QueryBuilderImpl implements QueryBuilder {
 		if (this.state.whereConditions.length > 0) {
 			const whereClauses: string[] = [];
 			for (const condition of this.state.whereConditions) {
-				whereClauses.push(`${condition.column} ${condition.operator} ?`);
-				params.push(condition.value);
+				if (condition.value === null) {
+					whereClauses.push(`${condition.column} ${condition.operator} NULL`);
+				} else {
+					whereClauses.push(`${condition.column} ${condition.operator} ?`);
+					params.push(condition.value);
+				}
 			}
 			sql += ` WHERE ${whereClauses.join(" AND ")}`;
 		}
