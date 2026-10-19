@@ -4,7 +4,7 @@
  * Structure for future MySQL support
  */
 
-import type { DatabaseDriver, QueryResult } from "./types.js";
+import type { DatabaseDriver, QueryResult, RunResult } from "./types.js";
 
 /**
  * MySQL connection configuration
@@ -70,6 +70,10 @@ export class MysqlDriver implements DatabaseDriver {
 	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	exec(_sql: string, ..._params: unknown[]): number {
 		// TODO: Implement MySQL exec
+		throw new Error("MySQL driver not implemented");
+	}
+
+	run(_sql: string, ..._params: unknown[]): RunResult {
 		throw new Error("MySQL driver not implemented");
 	}
 

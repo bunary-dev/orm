@@ -411,6 +411,19 @@ export abstract class BaseModel {
 			data[primaryKeyName] = Bun.randomUUIDv7();
 		}
 
+		// Reject unusable explicit keys before touching the database
+		const suppliedId = data[primaryKeyName];
+		if (
+			suppliedId !== undefined &&
+			suppliedId !== null &&
+			typeof suppliedId !== "string" &&
+			typeof suppliedId !== "number"
+		) {
+			throw new Error(
+				`Primary key ${primaryKeyName} must be string or number, got ${typeof suppliedId}`,
+			);
+		}
+
 		// Insert into database
 		const driver = await import("./connection.js").then((m) => m.getDriver());
 		const columns = Object.keys(data);
@@ -420,25 +433,32 @@ export abstract class BaseModel {
 			.map((col) => `"${col.replace(/"/g, '""')}"`)
 			.join(", ");
 
-		const sql = `INSERT INTO "${modelClass.tableName.replace(/"/g, '""')}" (${quotedColumns}) VALUES (${placeholders})`;
-		driver.exec(sql, ...values);
+		const quotedTable = `"${modelClass.tableName.replace(/"/g, '""')}"`;
+		const sql = `INSERT INTO ${quotedTable} (${quotedColumns}) VALUES (${placeholders})`;
+		const { lastInsertRowid } = driver.run(sql, ...values);
 
-		// Fetch the created record using BaseModel.find() which respects primaryKeyName
-		const createdId = data[primaryKeyName];
-		if (typeof createdId !== "string" && typeof createdId !== "number") {
-			throw new Error(
-				`Primary key ${primaryKeyName} must be string or number, got ${typeof createdId}`,
-			);
+		// Integer keys without an explicit id use the generated rowid
+		const createdId =
+			suppliedId === undefined || suppliedId === null
+				? Number(lastInsertRowid)
+				: suppliedId;
+		const quotedPk = `"${primaryKeyName.replace(/"/g, '""')}"`;
+
+		try {
+			// Use BaseModel.find() which respects the primary key name
+			const result = await (
+				BaseModel.find as (id: string | number) => Promise<ModelData | null>
+			).call(modelClass, createdId);
+			if (!result) {
+				throw new Error(
+					`Failed to retrieve created record with ${primaryKeyName}=${createdId}`,
+				);
+			}
+			return result;
+		} catch (error) {
+			// Don't leave a row behind if we could not return it
+			driver.run(`DELETE FROM ${quotedTable} WHERE ${quotedPk} = ?`, createdId);
+			throw error;
 		}
-		// Use BaseModel.find() which respects the primary key name
-		const result = await (
-			BaseModel.find as (id: string | number) => Promise<ModelData | null>
-		).call(modelClass, createdId);
-		if (!result) {
-			throw new Error(
-				`Failed to retrieve created record with ${primaryKeyName}=${createdId}`,
-			);
-		}
-		return result;
 	}
 }
