@@ -35,10 +35,32 @@ class SqliteQueryResult implements QueryResult {
 }
 
 /**
+ * Runs tasks strictly one at a time, in submission order.
+ */
+class SerialQueue {
+	private tail: Promise<unknown> = Promise.resolve();
+
+	run<T>(task: () => Promise<T>): Promise<T> {
+		const result = this.tail.then(task);
+		this.tail = result.catch(() => undefined);
+		return result;
+	}
+}
+
+function rollbackQuietly(db: Database, sql: string): void {
+	try {
+		db.exec(sql);
+	} catch {
+		// Transaction may already have been rolled back by SQLite
+	}
+}
+
+/**
  * SQLite database driver
  */
 export class SqliteDriver implements DatabaseDriver {
 	private db: Database;
+	private queue = new SerialQueue();
 
 	constructor(path: string) {
 		this.db = new Database(path);
@@ -67,57 +89,30 @@ export class SqliteDriver implements DatabaseDriver {
 		return this.db.query(sql).run(...(params as never[]));
 	}
 
+	/**
+	 * Run a callback in a transaction.
+	 *
+	 * Top-level transactions are serialized: concurrent calls are queued and run
+	 * one after another on the shared connection.
+	 *
+	 * Note: SQLite uses a single shared connection, so queries issued through
+	 * this root driver while a transaction is open are NOT isolated from it. They
+	 * execute inside the open transaction and are rolled back with it. Use the
+	 * `tx` argument for work that belongs to the transaction, and avoid root
+	 * driver writes while a transaction is in flight.
+	 */
 	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {
-		// Create a transaction-scoped driver instance
-		const txDriver = new SqliteTransactionDriver(this.db);
-
-		// Check if function is async by calling it and checking the result
-		// But we need to start the transaction BEFORE executing operations
-		// So we'll use a wrapper approach
-		const executeInTransaction = (): Promise<T> => {
-			return new Promise<T>((resolve, reject) => {
-				// Begin transaction FIRST
-				this.db.exec("BEGIN TRANSACTION");
-
-				try {
-					// Now execute the callback
-					const result = fn(txDriver);
-
-					// Check if result is a Promise (async callback)
-					if (result instanceof Promise) {
-						result
-							.then((value) => {
-								// Commit on success
-								this.db.exec("COMMIT");
-								resolve(value);
-							})
-							.catch((error) => {
-								// Rollback on error
-								try {
-									this.db.exec("ROLLBACK");
-								} catch {
-									// Ignore rollback errors
-								}
-								reject(error);
-							});
-					} else {
-						// Sync callback - commit and resolve
-						this.db.exec("COMMIT");
-						resolve(result);
-					}
-				} catch (error) {
-					// Sync error - rollback and reject
-					try {
-						this.db.exec("ROLLBACK");
-					} catch {
-						// Ignore rollback errors
-					}
-					reject(error);
-				}
-			});
-		};
-
-		return executeInTransaction();
+		return this.queue.run(async () => {
+			this.db.exec("BEGIN TRANSACTION");
+			try {
+				const value = await fn(new SqliteTransactionDriver(this.db));
+				this.db.exec("COMMIT");
+				return value;
+			} catch (error) {
+				rollbackQuietly(this.db, "ROLLBACK");
+				throw error;
+			}
+		});
 	}
 
 	close(): void {
@@ -142,6 +137,7 @@ export class SqliteDriver implements DatabaseDriver {
 class SqliteTransactionDriver implements DatabaseDriver {
 	private db: Database;
 	private static globalSavepointCounter = 0;
+	private queue = new SerialQueue();
 
 	constructor(db: Database) {
 		this.db = db;
@@ -166,64 +162,25 @@ class SqliteTransactionDriver implements DatabaseDriver {
 		return this.db.query(sql).run(...(params as never[]));
 	}
 
+	/**
+	 * Nested transaction using a savepoint. Sibling savepoints on the same
+	 * transaction are serialized so they can't be released out of order.
+	 */
 	transaction<T>(fn: (tx: DatabaseDriver) => Promise<T> | T): Promise<T> {
-		// Nested transaction using savepoint
-		SqliteTransactionDriver.globalSavepointCounter++;
-		const savepointName = `sp_${SqliteTransactionDriver.globalSavepointCounter}_${Date.now()}`;
-
-		// Create savepoint
-		this.db.exec(`SAVEPOINT ${savepointName}`);
-
-		let savepointReleased = false;
-
-		try {
-			// Create nested transaction driver
-			const nestedTxDriver = new SqliteTransactionDriver(this.db);
-			const result = fn(nestedTxDriver);
-
-			// Handle async/sync result
-			if (result instanceof Promise) {
-				return result
-					.then((value) => {
-						// Release savepoint on success
-						if (!savepointReleased) {
-							this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
-							savepointReleased = true;
-						}
-						return value;
-					})
-					.catch((error) => {
-						// Rollback to savepoint on error
-						if (!savepointReleased) {
-							try {
-								this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName}`);
-								savepointReleased = true;
-							} catch {
-								// Savepoint may have already been released/rolled back
-							}
-						}
-						throw error;
-					});
+		return this.queue.run(async () => {
+			SqliteTransactionDriver.globalSavepointCounter++;
+			const name = `sp_${SqliteTransactionDriver.globalSavepointCounter}`;
+			this.db.exec(`SAVEPOINT ${name}`);
+			try {
+				const value = await fn(new SqliteTransactionDriver(this.db));
+				this.db.exec(`RELEASE SAVEPOINT ${name}`);
+				return value;
+			} catch (error) {
+				rollbackQuietly(this.db, `ROLLBACK TO SAVEPOINT ${name}`);
+				rollbackQuietly(this.db, `RELEASE SAVEPOINT ${name}`);
+				throw error;
 			}
-
-			// Release savepoint on success (sync)
-			if (!savepointReleased) {
-				this.db.exec(`RELEASE SAVEPOINT ${savepointName}`);
-				savepointReleased = true;
-			}
-			return Promise.resolve(result);
-		} catch (error) {
-			// Rollback to savepoint on error
-			if (!savepointReleased) {
-				try {
-					this.db.exec(`ROLLBACK TO SAVEPOINT ${savepointName}`);
-					savepointReleased = true;
-				} catch {
-					// Savepoint may have already been released/rolled back
-				}
-			}
-			throw error;
-		}
+		});
 	}
 
 	close(): void {

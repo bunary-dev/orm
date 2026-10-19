@@ -130,39 +130,15 @@ setOrmConfig({
 });
 ```
 
-### MySQL (Coming Soon)
+### MySQL / PostgreSQL (Not Supported)
 
-```typescript
-// Using @bunary/core
-defineConfig({
-  orm: {
-    database: {
-      type: "mysql",
-      mysql: {
-        host: "localhost",
-        port: 3306,
-        user: "root",
-        password: "password",
-        database: "mydb"
-      }
-    }
-  }
-});
+Only SQLite is built in. `defineOrmConfig()`, `setOrmConfig()`, `getDriver()` and `createDriver()` reject `type: "mysql"` (and `"postgres"`), including configs supplied via `@bunary/core`, with:
 
-// Or using setOrmConfig()
-setOrmConfig({
-  database: {
-    type: "mysql",
-    mysql: {
-      host: "localhost",
-      port: 3306,
-      user: "root",
-      password: "password",
-      database: "mydb"
-    }
-  }
-});
 ```
+Database type "mysql" is not supported. Only SQLite is built in (MySQL and PostgreSQL are not implemented). Register a custom driver using registerDriver() for other types.
+```
+
+To use another database, register your own driver with `registerDriver("mysql", factory)`.
 
 ## API
 
@@ -389,17 +365,9 @@ The ORM uses a driver abstraction layer, making it easy to add new database type
 
 SQLite is fully supported and uses Bun's native `bun:sqlite` module.
 
-### MySQL (Structure Ready)
+### MySQL and PostgreSQL
 
-The MySQL driver structure is in place. To implement:
-
-1. Add MySQL client library (e.g., `mysql2`)
-2. Implement `MysqlDriver` in `src/drivers/mysql-driver.ts`
-3. Update `createDriver()` in `src/connection.ts`
-
-### PostgreSQL (Planned)
-
-PostgreSQL support will follow the same pattern as MySQL.
+Not implemented. Use `registerDriver()` to supply a driver.
 
 ### Custom Drivers (Third-Party Registry)
 

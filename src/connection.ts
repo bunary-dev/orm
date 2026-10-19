@@ -67,6 +67,22 @@ export function clearDriverRegistry(): void {
 	driverRegistry.clear();
 }
 
+function unsupportedTypeMessage(type: string): string {
+	return `Database type "${type}" is not supported. Only SQLite is built in (MySQL and PostgreSQL are not implemented). Register a custom driver using registerDriver() for other types.`;
+}
+
+/**
+ * Throw early if a configuration targets a database type with no driver
+ *
+ * @param config - Database configuration
+ * @throws If the type is neither built in nor registered via registerDriver()
+ */
+export function assertSupportedDatabaseType(config: DatabaseConfig): void {
+	if (config.type !== "sqlite" && !driverRegistry.has(config.type)) {
+		throw new Error(unsupportedTypeMessage(config.type));
+	}
+}
+
 /**
  * Create a database driver based on configuration
  *
@@ -101,16 +117,7 @@ export function createDriver(config: DatabaseConfig): DatabaseDriver {
 		return new SqliteDriver(config.sqlite.path);
 	}
 
-	if (config.type === "mysql") {
-		// Future: return new MysqlDriver(config.mysql!);
-		throw new Error(
-			"MySQL driver is not yet implemented. Only SQLite is supported in MVP.",
-		);
-	}
-
-	throw new Error(
-		`Database type "${config.type}" is not supported. Supported types: sqlite (mysql and postgres coming soon). Register a custom driver using registerDriver() for other types.`,
-	);
+	throw new Error(unsupportedTypeMessage(config.type));
 }
 
 /**

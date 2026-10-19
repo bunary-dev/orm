@@ -62,7 +62,7 @@ describe("Config", () => {
 			expect(globalConfig.database.sqlite?.path).toBe("./test.sqlite");
 		});
 
-		it("should handle MySQL config structure", () => {
+		it("should reject mysql early with a clear error", () => {
 			const config: OrmConfig = {
 				database: {
 					type: "mysql",
@@ -75,10 +75,10 @@ describe("Config", () => {
 				},
 			};
 
-			const result = defineOrmConfig(config);
-
-			expect(result.database.type).toBe("mysql");
-			expect(result.database.mysql?.host).toBe("localhost");
+			const message =
+				'Database type "mysql" is not supported. Only SQLite is built in';
+			expect(() => defineOrmConfig(config)).toThrow(message);
+			expect(() => setOrmConfig(config)).toThrow(message);
 		});
 	});
 
