@@ -171,6 +171,27 @@ describe("Schema Builder", () => {
 
 			expect(Schema.hasTable("exists_test")).toBe(true);
 		});
+
+		for (const name of ["name", "type", "sql"]) {
+			it(`should track a table named after the sqlite_master column "${name}"`, () => {
+				expect(Schema.hasTable(name)).toBe(false);
+
+				Schema.createTable(name, (table) => {
+					table.increments("id");
+				});
+				expect(Schema.hasTable(name)).toBe(true);
+
+				Schema.dropTable(name);
+				expect(Schema.hasTable(name)).toBe(false);
+			});
+		}
+
+		it("should return false without throwing for names containing quotes", () => {
+			expect(() => Schema.hasTable("it's")).not.toThrow();
+			expect(Schema.hasTable("it's")).toBe(false);
+			expect(Schema.hasTable('x" OR "1"="1')).toBe(false);
+			expect(Schema.hasTable("x' OR '1'='1")).toBe(false);
+		});
 	});
 
 	describe("Schema.hasColumn()", () => {
