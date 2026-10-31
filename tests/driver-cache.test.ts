@@ -1,7 +1,7 @@
 /**
  * Driver Caching and Reuse Tests
  */
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	clearOrmConfig,
 	closeDriver,
@@ -9,6 +9,7 @@ import {
 	resetDriver,
 	setOrmConfig,
 } from "../src/index.js";
+import { createTempFiles } from "./helpers/temp-files.js";
 
 describe("Driver Caching and Reuse", () => {
 	beforeEach(() => {
@@ -17,13 +18,19 @@ describe("Driver Caching and Reuse", () => {
 		resetDriver();
 	});
 
+	const temp = createTempFiles();
+	afterEach(() => {
+		closeDriver();
+		temp.cleanup();
+	});
+
 	describe("getDriver() caching", () => {
 		it("should return the same driver instance on repeated calls", () => {
 			setOrmConfig({
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-cache.sqlite",
+						path: temp.sqlitePath("bunary-test-cache"),
 					},
 				},
 			});
@@ -44,7 +51,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-same-config.sqlite",
+						path: temp.sqlitePath("bunary-test-same-config"),
 					},
 				},
 			};
@@ -67,7 +74,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-config1.sqlite",
+						path: temp.sqlitePath("bunary-test-config1"),
 					},
 				},
 			});
@@ -78,7 +85,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-config2.sqlite",
+						path: temp.sqlitePath("bunary-test-config2"),
 					},
 				},
 			});
@@ -96,7 +103,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-type1.sqlite",
+						path: temp.sqlitePath("bunary-test-type1"),
 					},
 				},
 			});
@@ -108,7 +115,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-type2.sqlite",
+						path: temp.sqlitePath("bunary-test-type2"),
 					},
 				},
 			});
@@ -128,7 +135,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-close.sqlite",
+						path: temp.sqlitePath("bunary-test-close"),
 					},
 				},
 			});
@@ -149,7 +156,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-close-multiple.sqlite",
+						path: temp.sqlitePath("bunary-test-close-multiple"),
 					},
 				},
 			});
@@ -170,7 +177,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-reset.sqlite",
+						path: temp.sqlitePath("bunary-test-reset"),
 					},
 				},
 			});
@@ -195,7 +202,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-reset-multiple.sqlite",
+						path: temp.sqlitePath("bunary-test-reset-multiple"),
 					},
 				},
 			});
@@ -216,7 +223,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-integration1.sqlite",
+						path: temp.sqlitePath("bunary-test-integration1"),
 					},
 				},
 			});
@@ -228,7 +235,7 @@ describe("Driver Caching and Reuse", () => {
 				database: {
 					type: "sqlite" as const,
 					sqlite: {
-						path: "/tmp/test-integration2.sqlite",
+						path: temp.sqlitePath("bunary-test-integration2"),
 					},
 				},
 			});
