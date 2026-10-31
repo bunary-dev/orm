@@ -7,11 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
+### Breaking
 
-- `defineConfig({ orm })` from `@bunary/core` now typechecks for consumers: the published declarations augment `BunaryConfig` with `orm?: OrmConfig` (unknown keys under `orm` remain type errors), without requiring the optional `@bunary/core` peer to be installed (#54)
-- `@bunary/core` is now marked optional via `peerDependenciesMeta`, matching the docs, so package managers no longer install it automatically (#54)
-- `Schema.hasTable(name)` now binds the table name as a string parameter instead of interpolating it as a double-quoted identifier, which SQLite resolved as a column reference: `hasTable("name")`, `hasTable("type")` and `hasTable("sql")` always returned `true`, even for missing tables (#45)
+- The orm is now built on Drizzle: `drizzle-orm` (^0.45) is a required peer dependency, and models are defined with `defineModel(db, table)` on a Drizzle database and table. Removed outright, with no compatibility shims: `Model.table()` and the query builder (`QueryBuilder`), `BaseModel`, the schema builder (`Schema`, `TableBuilder`), the migrator (`Migrator`, `createMigrator`, `MigrationsRepository`), the drivers and driver registry (`SqliteDriver`, `DatabaseDriver`, `registerDriver`, `getDriver`, `createDriver`, `closeDriver`, `resetDriver`, `clearDriverRegistry`), the global config store (`setOrmConfig`, `getOrmConfig`, `defineOrmConfig`, `clearOrmConfig`, `enableCoreConfig`, `OrmConfig` and friends) and the `orm` key augmentation of `@bunary/core`'s `BunaryConfig`; `@bunary/core` is no longer a peer dependency. Migrations are now done with drizzle-kit. The unreleased fixes to `Schema.hasTable` (#45) and the `BunaryConfig` augmentation (#54) are superseded by these removals. See "Upgrading from 0.2.x" in docs/index.md (#80)
+
+### Added
+
+- `defineModel(db, table, { primaryKey? })` for SQLite (`drizzle-orm/bun-sqlite`) and Postgres (`drizzle-orm/bun-sql`), with row types inferred from the table: `find(id)`, `findOrFail(id)` (throws `ModelNotFoundError` with `table` and `id`), `where(condition).get()` / `.first()`, `create(values)` (returns the persisted row including the database-assigned key, never mutates `values`, rejects an empty-string key), `query()` (raw Drizzle `select().from(table)`) and `hydrate(row)` (#80)
+- Model instances: columns as properties, `isDirty(key?)`, `getDirty()`, `save()` (writes only dirty columns; no query when clean), `delete()`, `refresh()`, `toJSON()` (#80)
+- Every model method accepts `{ tx }` to run on a Drizzle transaction; with `tx`, errors are thrown synchronously so synchronous bun:sqlite transactions roll back (#80)
 
 ## [0.2.0] - 2026-09-21
 

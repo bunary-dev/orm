@@ -4,11 +4,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
-      "complexity": {
-        "noStaticOnlyClass": "off",
-        "noThisInStatic": "off"
-      }
+      "recommended": true
     }
   },
   "formatter": {

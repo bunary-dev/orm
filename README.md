@@ -1,28 +1,38 @@
 # @bunary/orm
 
-ORM for Bunary: models, query builder, migrations, driver abstraction (SQLite built-in; register custom drivers). Full reference: [docs/index.md](./docs/index.md).
+Laravel-style models for Bunary on [Drizzle](https://orm.drizzle.team): `defineModel()` wraps a Drizzle table with `find` / `findOrFail` / `where` / `create`, and instances with dirty tracking, `save()`, `delete()` and `refresh()`. SQLite (`bun:sqlite`) and Postgres (`Bun.SQL`); migrations via drizzle-kit. Full reference: [docs/index.md](./docs/index.md).
 
 Requires Bun ≥ 1.4.0.
 
 ## Installation
 
 ```bash
-bun add @bunary/orm
+bun add @bunary/orm drizzle-orm
 ```
+
+`drizzle-orm` is a peer dependency.
 
 ## Quick start
 
 ```typescript
-import { Model, setOrmConfig } from "@bunary/orm";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { defineModel } from "@bunary/orm";
 
-setOrmConfig({
-  database: { type: "sqlite", sqlite: { path: "./database.sqlite" } }
+const users = sqliteTable("users", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  name: text().notNull(),
 });
 
-const user = await Model.table("users").find(1);
+const User = defineModel(drizzle({ client: new Database("app.sqlite") }), users);
+
+const user = await User.create({ name: "Ada" });
+user.name = "Ada Lovelace";
+await user.save(); // updates only the dirty columns
 ```
 
-For config (setOrmConfig, @bunary/core integration), migrations, schema builder, and driver API, see [docs/index.md](./docs/index.md).
+For Postgres, transactions (`{ tx }`), the raw Drizzle escape hatch, drizzle-kit migrations and upgrading from 0.2.x, see [docs/index.md](./docs/index.md).
 
 ## License
 
