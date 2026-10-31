@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `defineConfig({ orm })` from `@bunary/core` now typechecks for consumers: the published declarations augment `BunaryConfig` with `orm?: OrmConfig` (unknown keys under `orm` remain type errors), without requiring the optional `@bunary/core` peer to be installed (#54)
+- `@bunary/core` is now marked optional via `peerDependenciesMeta`, matching the docs, so package managers no longer install it automatically (#54)
 - `Schema.hasTable(name)` now binds the table name as a string parameter instead of interpolating it as a double-quoted identifier, which SQLite resolved as a column reference: `hasTable("name")`, `hasTable("type")` and `hasTable("sql")` always returned `true`, even for missing tables (#45)
 
 ## [0.2.0] - 2026-09-21
