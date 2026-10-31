@@ -56,6 +56,11 @@
   "peerDependencies": {
     "@bunary/core": "^0.2.0"
   },
+  "peerDependenciesMeta": {
+    "@bunary/core": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
     "@bunary/core": "^0.2.0",

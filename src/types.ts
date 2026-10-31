@@ -135,3 +135,19 @@ export interface QueryBuilder {
 	 */
 	count(): Promise<number>;
 }
+
+// @bunary/core 0.2.0 has no built-in `orm` key: each package augments
+// BunaryConfig itself. The type-only import pulls @bunary/core into the
+// program so the augmentation resolves when building; it is elided from the
+// emitted .d.ts, so consumers without the optional @bunary/core peer are
+// unaffected (an augmentation of a missing module is ignored in .d.ts files).
+import type {} from "@bunary/core";
+
+/**
+ * Adds the typed `orm` key to `defineConfig()` from `@bunary/core`.
+ */
+declare module "@bunary/core" {
+	interface BunaryConfig {
+		orm?: OrmConfig;
+	}
+}

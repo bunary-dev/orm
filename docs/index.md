@@ -58,6 +58,7 @@ Configure the ORM alongside your app configuration using `@bunary/core`:
 
 ```typescript
 import { createConfig, defineConfig } from "@bunary/core";
+import "@bunary/orm"; // or any import from "@bunary/orm" in your project
 
 // Create a config store
 const configStore = createConfig(
@@ -66,6 +67,7 @@ const configStore = createConfig(
       name: "MyApp",
       env: "development",
     },
+    // Typed as OrmConfig by @bunary/orm
     orm: {
       database: {
         type: "sqlite",
@@ -83,7 +85,21 @@ globalThis.__bunaryCoreConfigStore = configStore;
 
 The ORM will automatically read its configuration from `@bunary/core` when a config store is available and no explicit config is set.
 
-**Note:** `@bunary/core` is an optional peer dependency. Install it only if you want to use the integrated configuration approach.
+#### Typed `orm` key
+
+`@bunary/core` does not know about the ORM; `@bunary/orm` adds the `orm` key to `BunaryConfig` through module augmentation shipped in its type declarations:
+
+```typescript
+declare module "@bunary/core" {
+  interface BunaryConfig {
+    orm?: OrmConfig;
+  }
+}
+```
+
+You don't write this yourself: it takes effect as soon as anything in your project imports `@bunary/orm`. `orm` is then typed as `OrmConfig`, so a misspelled or unknown key under `orm` (or an invalid `database.type`) is a type error in `defineConfig()`.
+
+**Note:** `@bunary/core` is an optional peer dependency (`peerDependenciesMeta.optional`). Install it only if you want to use the integrated configuration approach; without it, `@bunary/orm` installs and typechecks normally and the augmentation is simply ignored.
 
 ### Option 2: Using setOrmConfig()
 

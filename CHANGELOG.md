@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- `defineConfig({ orm })` from `@bunary/core` now typechecks for consumers: the published declarations augment `BunaryConfig` with `orm?: OrmConfig` (unknown keys under `orm` remain type errors), without requiring the optional `@bunary/core` peer to be installed (#54)
+- `@bunary/core` is now marked optional via `peerDependenciesMeta`, matching the docs, so package managers no longer install it automatically (#54)
+
 ## [0.2.0] - 2026-09-21
 
 ### Changed

@@ -13,6 +13,9 @@
       "peerDependencies": {
         "@bunary/core": "^0.2.0",
       },
+      "optionalPeers": [
+        "@bunary/core",
+      ],
     },
   },
   "packages": {
