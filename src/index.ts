@@ -3,8 +3,11 @@
  *
  * Laravel-style models on top of Drizzle: define your tables with Drizzle,
  * wrap them with `defineModel()` and get CRUD with dirty tracking, model
- * events, hidden columns, soft deletes and named scopes. Supports
+ * events, hidden columns, soft deletes, named scopes and eager loading of
+ * Drizzle relations with `with()`. Supports
  * SQLite (`drizzle-orm/bun-sqlite`) and Postgres (`drizzle-orm/bun-sql`).
+ * The `@bunary/core` integration (`ormProvider`, `DatabaseToken`) is on the
+ * `@bunary/orm/provider` subpath.
  *
  * @example
  * ```ts
@@ -28,14 +31,22 @@
  * ```
  */
 
+export type {
+	DatabaseConfig,
+	PostgresDatabaseConfig,
+	SqliteDatabaseConfig,
+} from "./config.js";
 export { ModelNotFoundError } from "./errors.js";
 export { defineModel } from "./model.js";
 export type {
 	AnyDatabase,
+	CheckRelationNames,
 	CheckReservedColumns,
 	CheckReservedScopes,
 	DefineModelOptions,
 	InstanceMethods,
+	InstanceOf,
+	LoadedRelations,
 	Model,
 	ModelEvent,
 	ModelEventTargets,
@@ -45,10 +56,14 @@ export type {
 	ModelMethods,
 	ModelQuery,
 	NewRowOf,
+	NoRelations,
 	NoScopes,
 	PrimaryKeyColumn,
 	QueryMethods,
 	QueryOptions,
+	RelatedModel,
+	RelationsJson,
+	RelationsOf,
 	ReservedColumnName,
 	ReservedScopeName,
 	RowOf,
@@ -64,4 +79,5 @@ export type {
 	SupportsSoftDeletes,
 	TableFor,
 	TransactionFor,
+	WithRelations,
 } from "./types.js";

@@ -6,13 +6,18 @@
       "name": "@bunary/orm",
       "devDependencies": {
         "@biomejs/biome": "2.6.3",
+        "@bunary/core": "file:./vendor/bunary-core-1.0.0-rc.1.tgz",
         "@types/bun": "^1.4.2",
         "drizzle-orm": "^0.45.4",
         "typescript": "^7.0.2",
       },
       "peerDependencies": {
+        "@bunary/core": "^1.0.0-rc.1",
         "drizzle-orm": "^0.45.0",
       },
+      "optionalPeers": [
+        "@bunary/core",
+      ],
     },
   },
   "packages": {
@@ -37,6 +42,10 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.6.3", "", { "os": "win32", "cpu": "arm64" }, "sha512-00SthDxBPwNiT7IL/mOneif6fiEU1PXK875zhr+InpeZjovY1mF5tCuDhXo1Hh0GYyiKHKzLbItzn58SAyLhJQ=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.6.3", "", { "os": "win32", "cpu": "x64" }, "sha512-GhtOPphBWlnCepqpNk/w5eGN5oGRCzL20EbAkL1XCIpyboeVC9R642noyT43l8LSenGS4qz9IL8sKPfwY37V/Q=="],
+
+    "@bunary/core": ["@bunary/core@./vendor/bunary-core-1.0.0-rc.1.tgz", { "dependencies": { "@standard-schema/spec": "^1.1.0" } }, "sha512-UAiulTkbOeY/Xp0MeMmJqB+LFcWRMVm8vlWH8e/ya0xo6sb0SilzojSY90lWluIsBQeyLDndibWCnsrISsCcbw=="],
+
+    "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 
     "@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
