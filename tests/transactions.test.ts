@@ -3,14 +3,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { SqliteDriver } from "../src/drivers/sqlite-driver.js";
+import { createTempFiles } from "./helpers/temp-files.js";
 
 describe("Transaction Support", () => {
 	let driver: SqliteDriver;
 	let testDbPath: string;
+	const temp = createTempFiles();
 
 	beforeEach(() => {
 		// Create fresh database for each test with unique path
-		testDbPath = `/tmp/test-transactions-${Date.now()}-${Math.random()}.sqlite`;
+		testDbPath = temp.sqlitePath("bunary-test-transactions");
 		driver = new SqliteDriver(testDbPath);
 		// Create test table
 		driver.exec(
@@ -20,6 +22,7 @@ describe("Transaction Support", () => {
 
 	afterEach(() => {
 		driver.close();
+		temp.cleanup();
 	});
 
 	describe("transaction()", () => {

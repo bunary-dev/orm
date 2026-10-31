@@ -1,18 +1,22 @@
 /**
  * Connection Manager Tests
  */
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
 import { clearOrmConfig, setOrmConfig } from "../src/config.js";
 import { createDriver, getDriver, resetDriver } from "../src/connection.js";
 import type { DatabaseConfig } from "../src/types.js";
+import { createTempFiles } from "./helpers/temp-files.js";
 
 describe("Connection Manager", () => {
+	const temp = createTempFiles();
+	afterEach(() => temp.cleanup());
+
 	describe("createDriver()", () => {
 		it("should create SQLite driver with valid config", () => {
 			const config: DatabaseConfig = {
 				type: "sqlite",
 				sqlite: {
-					path: "/tmp/test-db.sqlite",
+					path: temp.sqlitePath("bunary-test-db"),
 				},
 			};
 
@@ -64,7 +68,7 @@ describe("Connection Manager", () => {
 				database: {
 					type: "sqlite",
 					sqlite: {
-						path: "/tmp/test-global-db.sqlite",
+						path: temp.sqlitePath("bunary-test-global-db"),
 					},
 				},
 			});
