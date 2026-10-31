@@ -9,7 +9,12 @@ import { beforeEach, describe, expect, it } from "bun:test";
 import { and, eq, gt, isNull } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
-import { type Model, ModelNotFoundError } from "../../src/index.js";
+import {
+	type DefineModelOptions,
+	type Model,
+	ModelNotFoundError,
+} from "../../src/index.js";
+import { persisted } from "./persisted.js";
 
 /** The shape both dialects' `users` tables share (typed via SQLite). */
 export const usersShape = sqliteTable("users", {
@@ -31,8 +36,26 @@ export const postsShape = sqliteTable("posts", {
 	title: text("title").notNull(),
 });
 
+type UserColumn = keyof typeof usersShape.$inferSelect & string;
+
+export type UsersModel<THidden extends UserColumn = never> = Model<
+	typeof usersShape,
+	BunSQLiteDatabase,
+	number,
+	THidden
+>;
+
 export interface SuiteContext {
-	Users: Model<typeof usersShape, BunSQLiteDatabase>;
+	Users: UsersModel;
+	/** Define another model for the `users` table, with options. */
+	defineUsers<const THidden extends UserColumn = never>(
+		options: DefineModelOptions<
+			typeof usersShape,
+			BunSQLiteDatabase,
+			typeof usersShape.id,
+			THidden
+		>,
+	): UsersModel<THidden>;
 	Posts: Model<typeof postsShape, BunSQLiteDatabase>;
 	users: typeof usersShape;
 	posts: typeof postsShape;
@@ -60,16 +83,20 @@ export function describeModelSuite(
 		});
 
 		const seed = async () => {
-			const john = await ctx.Users.create({
-				name: "John",
-				email: "john@example.com",
-				age: 30,
-			});
-			const jane = await ctx.Users.create({
-				name: "Jane",
-				email: "jane@example.com",
-				age: 25,
-			});
+			const john = persisted(
+				await ctx.Users.create({
+					name: "John",
+					email: "john@example.com",
+					age: 30,
+				}),
+			);
+			const jane = persisted(
+				await ctx.Users.create({
+					name: "Jane",
+					email: "jane@example.com",
+					age: 25,
+				}),
+			);
 			await ctx.Users.create({ name: "Bob", email: "bob@example.com" });
 			ctx.queries.length = 0;
 			return { john, jane };
@@ -77,41 +104,47 @@ export function describeModelSuite(
 
 		describe("create()", () => {
 			it("returns the persisted row including the database-assigned key", async () => {
-				const user = await ctx.Users.create({
-					name: "John",
-					email: "john@example.com",
-				});
+				const user = persisted(
+					await ctx.Users.create({
+						name: "John",
+						email: "john@example.com",
+					}),
+				);
 				expect(typeof user.id).toBe("number");
 				expect(user.id).toBeGreaterThan(0);
 				expect(user.name).toBe("John");
 				expect(user.age).toBeNull();
 				expect(user.createdAt).toBeInstanceOf(Date);
 
-				const second = await ctx.Users.create({
-					name: "Jane",
-					email: "jane@example.com",
-				});
+				const second = persisted(
+					await ctx.Users.create({
+						name: "Jane",
+						email: "jane@example.com",
+					}),
+				);
 				expect(second.id).not.toBe(user.id);
 			});
 
 			it("lets the table default assign a string key", async () => {
-				const post = await ctx.Posts.create({ title: "Hello" });
+				const post = persisted(await ctx.Posts.create({ title: "Hello" }));
 				expect(post.id).toMatch(ctx.postIdPattern);
 				const found = await ctx.Posts.find(post.id);
 				expect(found?.title).toBe("Hello");
 			});
 
 			it("keeps an explicit key", async () => {
-				const post = await ctx.Posts.create({
-					id: "0190b0a6-0000-7000-8000-000000000001",
-					title: "Explicit",
-				});
+				const post = persisted(
+					await ctx.Posts.create({
+						id: "0190b0a6-0000-7000-8000-000000000001",
+						title: "Explicit",
+					}),
+				);
 				expect(post.id).toBe("0190b0a6-0000-7000-8000-000000000001");
 			});
 
 			it("never mutates the caller's input", async () => {
 				const input = Object.freeze({ title: "Frozen" });
-				const post = await ctx.Posts.create(input);
+				const post = persisted(await ctx.Posts.create(input));
 				expect(post.id).toMatch(ctx.postIdPattern);
 				expect(input).toEqual({ title: "Frozen" });
 				expect("id" in input).toBe(false);
@@ -125,7 +158,9 @@ export function describeModelSuite(
 			});
 
 			it("returns a clean instance", async () => {
-				const user = await ctx.Users.create({ name: "A", email: "a@x.io" });
+				const user = persisted(
+					await ctx.Users.create({ name: "A", email: "a@x.io" }),
+				);
 				expect(user.isDirty()).toBe(false);
 				expect(user.getDirty()).toEqual({});
 			});
@@ -256,11 +291,13 @@ export function describeModelSuite(
 			});
 
 			it("notices in-place changes to JSON values", async () => {
-				const user = await ctx.Users.create({
-					name: "J",
-					email: "j@x.io",
-					meta: { tags: ["a"] },
-				});
+				const user = persisted(
+					await ctx.Users.create({
+						name: "J",
+						email: "j@x.io",
+						meta: { tags: ["a"] },
+					}),
+				);
 				(user.meta as { tags: string[] }).tags.push("b");
 				expect(user.getDirty()).toEqual({ meta: { tags: ["a", "b"] } });
 				await user.save();
@@ -308,7 +345,9 @@ export function describeModelSuite(
 			});
 
 			it("can change the primary key", async () => {
-				const post = await ctx.Posts.create({ id: "old", title: "T" });
+				const post = persisted(
+					await ctx.Posts.create({ id: "old", title: "T" }),
+				);
 				post.id = "new";
 				await post.save();
 				expect(await ctx.Posts.find("old")).toBeNull();
@@ -335,8 +374,12 @@ export function describeModelSuite(
 			});
 
 			it("uses the persisted key, not an unsaved change to it", async () => {
-				const post = await ctx.Posts.create({ id: "keep-me", title: "T" });
-				const other = await ctx.Posts.create({ id: "other", title: "O" });
+				const post = persisted(
+					await ctx.Posts.create({ id: "keep-me", title: "T" }),
+				);
+				const other = persisted(
+					await ctx.Posts.create({ id: "other", title: "O" }),
+				);
 				post.id = "other";
 				await post.delete();
 				expect(await ctx.Posts.find("keep-me")).toBeNull();
@@ -391,6 +434,296 @@ export function describeModelSuite(
 				expect(ctx.Users.table).toBe(ctx.users);
 				expect(ctx.Users.tableName).toMatch(/users$/);
 				expect(ctx.Users.db).toBeDefined();
+			});
+		});
+
+		describe("where() bulk writes", () => {
+			it("update() writes every matching row and returns the count", async () => {
+				await seed();
+				const count = await ctx.Users.where(gt(ctx.users.age, 20)).update({
+					age: 50,
+				});
+				expect(count).toBe(2);
+				const rows = await ctx.Users.where(eq(ctx.users.age, 50)).get();
+				expect(rows.map((u) => u.name).sort()).toEqual(["Jane", "John"]);
+			});
+
+			it("delete() removes every matching row and returns the count", async () => {
+				await seed();
+				expect(await ctx.Users.where(isNull(ctx.users.age)).delete()).toBe(1);
+				expect((await ctx.Users.query()).map((u) => u.name).sort()).toEqual([
+					"Jane",
+					"John",
+				]);
+			});
+		});
+
+		describe("events", () => {
+			const log: string[] = [];
+			const record =
+				(event: string) =>
+				(target: { name?: string }): void => {
+					log.push(`${event}:${target.name}`);
+				};
+			beforeEach(() => {
+				log.length = 0;
+			});
+
+			it("create() fires saving then creating with the values", async () => {
+				const Users = ctx.defineUsers({
+					events: { saving: record("saving"), creating: record("creating") },
+				});
+				Users.on("updating", record("updating"));
+				persisted(await Users.create({ name: "A", email: "a@x.io" }));
+				expect(log).toEqual(["saving:A", "creating:A"]);
+			});
+
+			it("creating listeners can change the values before the insert", async () => {
+				const Users = ctx.defineUsers({
+					events: {
+						creating: (values) => {
+							values.email = values.email.toLowerCase();
+						},
+					},
+				});
+				const input = { name: "A", email: "A@X.IO" };
+				const user = persisted(await Users.create(input));
+				expect(user.email).toBe("a@x.io");
+				expect(input.email).toBe("A@X.IO");
+			});
+
+			it("save() fires saving then updating with the instance", async () => {
+				const { john } = await seed();
+				ctx.Users.on("saving", record("saving"));
+				ctx.Users.on("updating", record("updating"));
+				ctx.Users.on("creating", record("creating"));
+				john.name = "Johnny";
+				expect(await john.save()).toBe(john);
+				expect(log).toEqual(["saving:Johnny", "updating:Johnny"]);
+			});
+
+			it("save() on a clean instance fires saving but not updating", async () => {
+				const { john } = await seed();
+				ctx.Users.on("saving", record("saving"));
+				ctx.Users.on("updating", record("updating"));
+				expect(await john.save()).toBe(john);
+				expect(log).toEqual(["saving:John"]);
+				expect(ctx.queries).toEqual([]);
+			});
+
+			it("changes made by listeners are saved", async () => {
+				const { john } = await seed();
+				ctx.Users.on("updating", (user) => {
+					user.email = `${user.name.toLowerCase()}@changed.io`;
+				});
+				john.name = "Johnny";
+				await john.save();
+				expect((await ctx.Users.findOrFail(john.id)).email).toBe(
+					"johnny@changed.io",
+				);
+			});
+
+			it("delete() fires deleting with the instance", async () => {
+				const { john } = await seed();
+				ctx.Users.on("deleting", record("deleting"));
+				expect(await john.delete()).toBe(true);
+				expect(log).toEqual(["deleting:John"]);
+				expect(await ctx.Users.find(john.id)).toBeNull();
+			});
+
+			it("runs listeners in registration order, options first, awaiting async ones", async () => {
+				const Users = ctx.defineUsers({
+					events: {
+						saving: [
+							async () => {
+								await Bun.sleep(5);
+								log.push("options-1");
+							},
+							() => void log.push("options-2"),
+						],
+					},
+				});
+				Users.on("saving", async () => {
+					await Bun.sleep(1);
+					log.push("on-1");
+				});
+				Users.on("saving", () => void log.push("on-2"));
+				await Users.create({ name: "A", email: "a@x.io" });
+				expect(log).toEqual(["options-1", "options-2", "on-1", "on-2"]);
+			});
+
+			it("on() returns a function that removes the listener", async () => {
+				const off = ctx.Users.on("creating", record("creating"));
+				off();
+				await ctx.Users.create({ name: "A", email: "a@x.io" });
+				expect(log).toEqual([]);
+			});
+
+			describe("cancellation", () => {
+				it("creating returning false cancels create()", async () => {
+					ctx.Users.on("creating", () => false);
+					ctx.Users.on("creating", record("never"));
+					expect(await ctx.Users.create({ name: "A", email: "a@x.io" })).toBe(
+						false,
+					);
+					expect(log).toEqual([]);
+					expect(ctx.queries).toEqual([]);
+					expect(await ctx.Users.query()).toEqual([]);
+				});
+
+				it("saving returning false cancels create() before creating fires", async () => {
+					ctx.Users.on("saving", async () => false);
+					ctx.Users.on("creating", record("creating"));
+					expect(await ctx.Users.create({ name: "A", email: "a@x.io" })).toBe(
+						false,
+					);
+					expect(log).toEqual([]);
+					expect(await ctx.Users.query()).toEqual([]);
+				});
+
+				it("updating returning false cancels save() and keeps the changes", async () => {
+					const { john } = await seed();
+					ctx.Users.on("updating", async () => false);
+					john.name = "Johnny";
+					expect(await john.save()).toBe(false);
+					expect(ctx.queries).toEqual([]);
+					expect(john.isDirty("name")).toBe(true);
+					expect((await ctx.Users.findOrFail(john.id)).name).toBe("John");
+				});
+
+				it("saving returning false cancels save()", async () => {
+					const { john } = await seed();
+					ctx.Users.on("saving", () => false);
+					ctx.Users.on("updating", record("updating"));
+					john.name = "Johnny";
+					expect(await john.save()).toBe(false);
+					expect(log).toEqual([]);
+					expect((await ctx.Users.findOrFail(john.id)).name).toBe("John");
+				});
+
+				it("deleting returning false cancels delete()", async () => {
+					const { john } = await seed();
+					ctx.Users.on("deleting", () => false);
+					expect(await john.delete()).toBe(false);
+					expect(ctx.queries).toEqual([]);
+					expect(await ctx.Users.find(john.id)).not.toBeNull();
+				});
+
+				it("only false cancels; other return values do not", async () => {
+					ctx.Users.on("creating", () => undefined as unknown as boolean);
+					ctx.Users.on("creating", () => true);
+					expect(
+						await ctx.Users.create({ name: "A", email: "a@x.io" }),
+					).toMatchObject({ name: "A" });
+				});
+			});
+
+			describe("errors", () => {
+				it("a throwing listener rejects create() and writes nothing", async () => {
+					ctx.Users.on("creating", () => {
+						throw new Error("nope");
+					});
+					await expect(
+						ctx.Users.create({ name: "A", email: "a@x.io" }),
+					).rejects.toThrow("nope");
+					expect(await ctx.Users.query()).toEqual([]);
+				});
+
+				it("a rejecting async listener rejects save() and writes nothing", async () => {
+					const { john } = await seed();
+					ctx.Users.on("updating", async () => {
+						throw new Error("async nope");
+					});
+					john.name = "Johnny";
+					await expect(john.save()).rejects.toThrow("async nope");
+					expect((await ctx.Users.findOrFail(john.id)).name).toBe("John");
+				});
+
+				it("a throwing listener rejects delete()", async () => {
+					const { john } = await seed();
+					ctx.Users.on("deleting", () => {
+						throw new Error("keep");
+					});
+					await expect(john.delete()).rejects.toThrow("keep");
+					expect(await ctx.Users.find(john.id)).not.toBeNull();
+				});
+			});
+
+			it("bulk where().update() / .delete() fire no events", async () => {
+				await seed();
+				for (const event of [
+					"creating",
+					"updating",
+					"saving",
+					"deleting",
+				] as const) {
+					ctx.Users.on(event, () => {
+						log.push(event);
+						return false;
+					});
+				}
+				expect(
+					await ctx.Users.where(eq(ctx.users.name, "John")).update({ age: 1 }),
+				).toBe(1);
+				expect(await ctx.Users.where(eq(ctx.users.name, "Bob")).delete()).toBe(
+					1,
+				);
+				expect(log).toEqual([]);
+				expect((await ctx.Users.query()).map((u) => u.name).sort()).toEqual([
+					"Jane",
+					"John",
+				]);
+			});
+		});
+
+		describe("hidden columns", () => {
+			it("are loaded and usable but stripped from toJSON() and JSON.stringify", async () => {
+				const Users = ctx.defineUsers({ hidden: ["email", "meta"] });
+				const created = persisted(
+					await Users.create({
+						name: "A",
+						email: "secret@x.io",
+						meta: { token: "t" },
+					}),
+				);
+				const user = await Users.findOrFail(created.id);
+				expect(user.email).toBe("secret@x.io");
+				expect(user.meta).toEqual({ token: "t" });
+
+				const json = user.toJSON();
+				expect(Object.keys(json).sort()).toEqual([
+					"age",
+					"createdAt",
+					"id",
+					"name",
+				]);
+				expect("email" in json).toBe(false);
+				const text = JSON.stringify(user);
+				expect(text).not.toContain("secret@x.io");
+				expect(JSON.parse(text)).toEqual(JSON.parse(JSON.stringify(json)));
+
+				user.email = "new@x.io";
+				expect(user.isDirty("email")).toBe(true);
+				await user.save();
+				expect((await Users.findOrFail(user.id)).email).toBe("new@x.io");
+			});
+
+			it("apply to instances from where(), hydrate() and query rows alike", async () => {
+				await seed();
+				const Users = ctx.defineUsers({ hidden: ["email"] });
+				const [first] = await Users.where(eq(ctx.users.name, "John")).get();
+				expect(first?.toJSON()).not.toHaveProperty("email");
+				const [row] = await Users.query().where(eq(ctx.users.name, "Jane"));
+				if (!row) throw new Error("row missing");
+				expect(Users.hydrate(row).toJSON()).not.toHaveProperty("email");
+			});
+
+			it("other models of the same table are unaffected", async () => {
+				ctx.defineUsers({ hidden: ["email"] });
+				const user = persisted(
+					await ctx.Users.create({ name: "A", email: "a@x.io" }),
+				);
+				expect(user.toJSON().email).toBe("a@x.io");
 			});
 		});
 	});

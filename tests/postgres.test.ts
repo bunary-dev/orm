@@ -32,6 +32,7 @@ import {
 	type SuiteContext,
 	type usersShape,
 } from "./helpers/model-suite.js";
+import { persisted } from "./helpers/persisted.js";
 
 const url = process.env.TEST_POSTGRES_URL;
 const skip = !url;
@@ -109,6 +110,7 @@ describeModelSuite(
 		// types are identical.
 		Users: defineModel(db, users) as unknown as SuiteContext["Users"],
 		Posts: defineModel(db, posts) as unknown as SuiteContext["Posts"],
+		defineUsers: (options) => defineModel(db, users, options as never) as never,
 		users: users as unknown as typeof usersShape,
 		posts: posts as unknown as typeof postsShape,
 		queries,
@@ -132,14 +134,18 @@ describe.skipIf(skip)("defineModel (postgres)", () => {
 	});
 
 	it("returns a defaultRandom() uuid key assigned by the database", async () => {
-		const token = await Tokens.create({ label: "t" });
+		const token = persisted(await Tokens.create({ label: "t" }));
 		expect(token.id).toMatch(UUID);
 		expect((await Tokens.findOrFail(token.id)).label).toBe("t");
 	});
 
 	it("create() / save() / delete() with { tx } commit with the transaction", async () => {
-		const keep = await Users.create({ name: "Keep", email: "k@x.io" });
-		const drop = await Users.create({ name: "Drop", email: "d@x.io" });
+		const keep = persisted(
+			await Users.create({ name: "Keep", email: "k@x.io" }),
+		);
+		const drop = persisted(
+			await Users.create({ name: "Drop", email: "d@x.io" }),
+		);
 
 		await db.transaction(async (tx) => {
 			await Users.create({ name: "New", email: "n@x.io" }, { tx });
@@ -153,7 +159,9 @@ describe.skipIf(skip)("defineModel (postgres)", () => {
 	});
 
 	it("rolls back model writes when the transaction fails", async () => {
-		const keep = await Users.create({ name: "Keep", email: "k@x.io" });
+		const keep = persisted(
+			await Users.create({ name: "Keep", email: "k@x.io" }),
+		);
 
 		await expect(
 			db.transaction(async (tx) => {

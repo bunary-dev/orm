@@ -3,8 +3,8 @@
 Laravel-style models for Bunary, built on [Drizzle](https://orm.drizzle.team).
 
 You define tables with Drizzle; `defineModel()` wraps a table in a model with
-`find` / `create` / `save` / `delete`, dirty tracking and a typed not-found
-error. Everything else (joins, aggregates, migrations) is plain Drizzle.
+`find` / `create` / `save` / `delete`, dirty tracking, model events, hidden
+columns and a typed not-found error. Everything else (joins, aggregates, migrations) is plain Drizzle.
 
 Supported dialects:
 
@@ -48,6 +48,7 @@ const db = drizzle({ client: new Database("app.sqlite") });
 export const User = defineModel(db, users);
 
 const user = await User.create({ name: "Ada", email: "ada@example.com" });
+if (!user) throw new Error("cancelled by a creating/saving listener"); // see Events
 user.id; // assigned by SQLite
 
 user.name = "Ada Lovelace";
@@ -67,6 +68,8 @@ await found?.delete();
 | `db`                  | A Drizzle database: `drizzle()` from `drizzle-orm/bun-sqlite` or `drizzle-orm/bun-sql` |
 | `table`               | A Drizzle table of the same dialect (`sqliteTable` / `pgTable`)              |
 | `options.primaryKey`  | Primary key column, e.g. `tags.slug`. Defaults to the table's `.primaryKey()` column |
+| `options.hidden`      | Column keys left out of `toJSON()`, see [Hidden columns](#hidden-columns) |
+| `options.events`      | Listeners per event, see [Events](#events)                                 |
 
 Row types are inferred from the table: instances have the table's select type
 (`typeof users.$inferSelect`), `create()` takes its insert type
@@ -79,9 +82,29 @@ type error.
 - the table has no single `.primaryKey()` column and no `primaryKey` option
   is given (composite keys are not supported);
 - `primaryKey` is not a column of the table;
-- a column's JS key is one of the instance method names (`isDirty`,
-  `getDirty`, `save`, `delete`, `refresh`, `toJSON`). The SQL column name can
-  be anything: rename the JS key, e.g. `saveFlag: integer("save")`.
+- a column's JS key is a [reserved name](#reserved-names);
+- a `hidden` key is not a column of the table.
+
+### Reserved names
+
+Columns are properties of the instance, next to its methods, so a column's JS
+key may not be one of the instance method names: `isDirty`, `getDirty`,
+`save`, `delete`, `refresh`, `toJSON` (or `constructor`). Such a table is a
+**type error** in `defineModel()`, naming the column, and `defineModel()`
+also **throws at runtime** (`column "save" of "posts" is reserved for a model
+method; rename its JS key`) for code that is not type-checked.
+
+The SQL column name can be anything: only the JS key matters, so rename it:
+
+```typescript
+const posts = sqliteTable("posts", {
+  id: integer().primaryKey(),
+  // save: integer(),            // type error + throws
+  saveFlag: integer("save"),     // fine: SQL column is still "save"
+});
+```
+
+The list is exported as the `ReservedColumnName` type.
 
 ### Postgres
 
@@ -180,15 +203,31 @@ const unnamed = await User.where(and(isNull(users.age), eq(users.name, ""))).fir
 
 For ordering, limits, joins or aggregates use [`query()`](#raw-drizzle-query-and-hydrate).
 
+### Bulk writes: `where(condition).update(values, options?)` / `.delete(options?)`
+
+Update or delete every matching row in one statement and get the number of
+rows affected. An `undefined` condition matches every row.
+
+```typescript
+const archived = await User.where(lt(users.lastSeen, cutoff)).update({ archived: true });
+const removed = await User.where(eq(users.archived, true)).delete();
+```
+
+Bulk writes load no instances and **fire no [model events](#events)**; use
+instance `save()` / `delete()` when listeners must run.
+
 ## Creating
 
 ### `create(values, options?)`
 
-Inserts a row and returns it as a clean instance, including database-assigned
-values. `values` is copied, never mutated.
+Fires `saving` and `creating`, then inserts a row and returns it as a clean
+instance, including database-assigned values. `values` is copied, never
+mutated. Resolves to `false` (and inserts nothing) when a listener cancels
+it, so narrow the result before using it:
 
 ```typescript
 const token = await Token.create({ label: "ci" });
+if (!token) throw new Error("cancelled");
 token.id; // uuid from defaultRandom()
 ```
 
@@ -205,7 +244,7 @@ user.name = "Ada Lovelace";
 
 const { id, name } = user; // destructuring works
 JSON.stringify(user); // {"id":1,"name":"Ada Lovelace",...}
-user.toJSON(); // plain object copy
+user.toJSON(); // plain object copy, without hidden columns
 ```
 
 Instances are sealed: assigning a property that is not a column throws a
@@ -231,27 +270,100 @@ user.getDirty(); // { email: "ada@lovelace.dev" }
 
 ### `save(options?)`
 
-Writes **only the dirty columns** (`UPDATE … SET <dirty columns> WHERE <pk> =
+Fires `saving`, then, if anything is dirty, `updating`, then writes **only the dirty columns** (`UPDATE … SET <dirty columns> WHERE <pk> =
 <persisted pk>`), then reloads the instance from the `RETURNING` row, so
 `$onUpdate` values and triggers are reflected. With nothing dirty, `save()`
 runs no query. Changing the primary key and saving updates the key. Throws
-`ModelNotFoundError` when the row no longer exists. Returns the instance.
+`ModelNotFoundError` when the row no longer exists. Returns the instance, or
+`false` when a listener cancelled the save (nothing is written and the
+instance keeps its unsaved changes).
 
 Because only dirty columns are written, two instances of the same row that
 change different columns do not overwrite each other.
 
 ### `delete(options?)`
 
-Deletes the row, matched by its persisted primary key.
+Fires `deleting`, then deletes the row, matched by its persisted primary key.
+Returns `true`, or `false` when a listener cancelled the delete.
 
 ### `refresh(options?)`
 
 Reloads every column from the database and discards unsaved changes. Throws
 `ModelNotFoundError` when the row no longer exists. Returns the instance.
 
+## Events
+
+Listeners run **before** a write and can change it or cancel it, as with
+Eloquent's model events:
+
+| Event      | Fired by                                         | Listener receives                    |
+| ---------- | ------------------------------------------------ | ------------------------------------ |
+| `saving`   | `create()` and `save()`, first                   | the insert values, or the instance   |
+| `creating` | `create()`, after `saving`                       | the insert values (a mutable copy)   |
+| `updating` | `save()`, after `saving`, only if anything is dirty | the instance                       |
+| `deleting` | `delete()`                                       | the instance                         |
+
+Register listeners with the `events` option (one function or a list per
+event) and/or with `Model.on(event, listener)`, which returns a function that
+removes the listener:
+
+```typescript
+const User = defineModel(db, users, {
+  events: {
+    creating: async (values) => {
+      values.password = await Bun.password.hash(values.password);
+    },
+    deleting: (user) => user.role !== "admin", // false cancels
+  },
+});
+
+const off = User.on("updating", (user) => {
+  if (user.isDirty("email")) user.emailVerifiedAt = null;
+});
+off(); // remove it again
+```
+
+- Listeners may be **async**; they run one at a time, in registration order
+  (the `events` option first, then `on()` calls in order).
+- Returning **`false`** (or a promise of `false`) **cancels** the write: nothing
+  is written, later listeners do not run, and `create()` / `save()` /
+  `delete()` resolve to `false`. Any other return value, including
+  `undefined`, lets it proceed.
+- **Throwing** (or rejecting) aborts the write and propagates to the caller:
+  the method rejects, or with `{ tx }` throws (see [Transactions](#transactions)).
+- Changes listeners make are written: `creating` / `saving` (on create) may
+  edit the values, `saving` / `updating` (on save) may set attributes, and
+  the dirty columns are computed after the listeners have run.
+- `saving` receives the values from `create()` and the instance from
+  `save()`; tell them apart with `"isDirty" in target`.
+- Only **instance operations** fire events. Bulk
+  [`where(...).update()` / `.delete()`](#bulk-writes-wherecondition-updatevalues-options--deleteoptions),
+  `query()` and anything done through `User.db` fire none.
+- Listeners belong to the model returned by `defineModel()`; another model of
+  the same table has its own.
+
+## Hidden columns
+
+`hidden` lists column keys to leave out of `toJSON()`, and therefore out of
+`JSON.stringify(instance)` and JSON responses:
+
+```typescript
+const User = defineModel(db, users, { hidden: ["password", "rememberToken"] });
+
+const user = await User.findOrFail(1);
+user.password; // loaded and usable in code
+JSON.stringify(user); // {"id":1,"name":"Ada",...} without password / rememberToken
+```
+
+Hidden columns are still selected, readable, writable, dirty-tracked and
+saved; only `toJSON()` omits them, and its return type does too. They remain
+enumerable properties, so spreading (`{ ...user }`) or `Object.keys(user)`
+still includes them, as do the plain rows from `query()`. Keys are checked:
+a key that is not a column is a type error and throws in `defineModel()`.
+
 ## Transactions
 
-`create()`, `save()`, `delete()` and every read (`find`, `findOrFail`,
+`create()`, `save()`, `delete()`, bulk `where().update()` / `.delete()` and every read (`find`, `findOrFail`,
 `where().get/first`, `refresh`, `query`) accept `{ tx }`: a Drizzle
 transaction (or database) of the same dialect, used instead of the model's
 `db`.
@@ -280,7 +392,7 @@ transaction; their promises are already settled and can be awaited after it:
 ```typescript
 import type { ModelInstance } from "@bunary/orm";
 
-let created!: Promise<ModelInstance<typeof orders>>;
+let created!: Promise<ModelInstance<typeof orders> | false>;
 db.transaction((tx) => {
   created = Order.create({ userId: user.id, total: 100 }, { tx });
   user.balance -= 100;
@@ -305,6 +417,13 @@ db.transaction((tx) => {
 });
 ```
 
+Event listeners run synchronously as long as they return synchronously, so
+their writes stay inside the transaction too. **Inside a bun:sqlite
+transaction, listeners must be synchronous**: an async listener defers the
+query until after the callback has returned and the transaction has committed.
+A listener that throws with `{ tx }` throws synchronously, rolling the
+transaction back.
+
 Instances are in-memory objects: when a transaction rolls back, instances
 saved inside it keep their new values; call `refresh()` to reload them.
 
@@ -328,8 +447,8 @@ const rows = await User.query()
 const users = rows.map(User.hydrate);
 ```
 
-The model also exposes `db`, `table` and `tableName`. For joins, aggregates,
-upserts or bulk writes, use `User.db` and Drizzle directly.
+The model also exposes `db`, `table` and `tableName`. For joins, aggregates
+or upserts, use `User.db` and Drizzle directly.
 
 ## Migrations (drizzle-kit)
 
@@ -376,7 +495,9 @@ values are bound as parameters. Conditions are Drizzle expressions; inside
 | Error                | Thrown by                                     | Properties    |
 | -------------------- | --------------------------------------------- | ------------- |
 | `ModelNotFoundError` | `findOrFail()`, `save()` and `refresh()` on a deleted row | `table`, `id` |
-| `Error`              | `defineModel()` (invalid definition), `create()` (empty-string key) | |
+| `Error`              | `defineModel()` (invalid definition, reserved column name, unknown hidden key), `create()` (empty-string key) | |
+
+Errors thrown by event listeners propagate unchanged.
 
 Database errors (constraint violations, …) are passed through from the driver.
 
@@ -384,11 +505,14 @@ Database errors (constraint violations, …) are passed through from the driver.
 
 | Export                         | Description                                          |
 | ------------------------------ | ---------------------------------------------------- |
-| `Model<TTable, TDb, TId>`      | What `defineModel()` returns                         |
-| `ModelInstance<TTable, TDb>`   | A row plus the instance methods                      |
+| `Model<TTable, TDb, TId, THidden>` | What `defineModel()` returns                     |
+| `ModelInstance<TTable, TDb, THidden>` | A row plus the instance methods              |
 | `RowOf<TTable>` / `NewRowOf<TTable>` | Select / insert types of a table               |
 | `QueryOptions<TDb>`            | `{ tx? }`                                            |
-| `DefineModelOptions`           | `{ primaryKey? }`                                    |
+| `DefineModelOptions`           | `{ primaryKey?, hidden?, events? }`                  |
+| `ModelEvent`                   | `"creating" \| "updating" \| "saving" \| "deleting"` |
+| `ModelListener<T>`, `ModelListeners`, `ModelEventTargets` | A listener, the `events` option, what each event receives |
+| `ReservedColumnName`, `CheckReservedColumns` | The reserved column keys and the check `defineModel()` applies |
 | `WhereQuery`                   | What `where()` returns                               |
 | `SelectQuery<TDb, TTable>`     | What `query()` returns                               |
 | `AnyDatabase`, `TableFor`, `TransactionFor`, `PrimaryKeyColumn`, `InstanceMethods` | Helpers used by the above |
@@ -412,7 +536,7 @@ drivers with Drizzle. There are no compatibility shims.
 | `.where("age", ">", 18).all()`                   | `.where(gt(users.age, 18)).get()`                      |
 | `.select()`, `.exclude()`, `.orderBy()`, `.limit()`, `.offset()`, `.count()` | `query()` and Drizzle (`db.$count(users)` for counts) |
 | `BaseModel.create()` generating UUID v7 keys     | `$defaultFn(() => Bun.randomUUIDv7())` on the column   |
-| `protected` / `timestamps` exclusion             | select the columns you want with `User.db.select({...})` |
+| `protected` / `timestamps` exclusion             | `hidden: [...]` (omits from `toJSON()`), or select the columns you want with `User.db.select({...})` |
 | `Schema.create()`, `Migrator`, `MigrationsRepository` | Drizzle tables + drizzle-kit                      |
 | `SqliteDriver`, `registerDriver()`, `getDriver().transaction()` | Drizzle drivers and `db.transaction()` |
 
