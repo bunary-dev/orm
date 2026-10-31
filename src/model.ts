@@ -1,5 +1,5 @@
 /**
- * defineModel - Drizzle-backed models with CRUD and dirty tracking
+ * defineModel - Drizzle-backed models with CRUD, dirty tracking and events
  */
 import {
 	type Column,
@@ -12,18 +12,23 @@ import {
 import { ModelNotFoundError } from "./errors.js";
 import type {
 	AnyDatabase,
+	CheckReservedColumns,
 	DefineModelOptions,
 	Model,
+	ModelEvent,
 	ModelInstance,
+	ModelListener,
 	PrimaryKeyColumn,
 	QueryOptions,
+	ReservedColumnName,
+	RowOf,
 	TableFor,
 } from "./types.js";
 
 type Row = Record<string, unknown>;
 
 /** Instance method names; a column key may not shadow them. */
-const RESERVED = new Set([
+const RESERVED = new Set<string>([
 	"isDirty",
 	"getDirty",
 	"save",
@@ -31,7 +36,9 @@ const RESERVED = new Set([
 	"refresh",
 	"toJSON",
 	"constructor",
-]);
+] satisfies ReservedColumnName[]);
+
+const EVENTS: ModelEvent[] = ["creating", "updating", "saving", "deleting"];
 
 interface InstanceState {
 	attributes: Row;
@@ -82,7 +89,7 @@ function execute(builder: Runner): Row[] | Promise<Row[]> {
 
 function then<T, R>(
 	value: T | Promise<T>,
-	next: (value: T) => R,
+	next: (value: T) => R | Promise<R>,
 ): R | Promise<R> {
 	return value instanceof Promise ? value.then(next) : next(value);
 }
@@ -102,6 +109,30 @@ function settle<T>(
 		if (options?.tx) throw error;
 		return Promise.reject(error);
 	}
+}
+
+type Listener = ModelListener<unknown>;
+
+/**
+ * Run `listeners` in order, awaiting any that return a promise, and stop at
+ * the first that returns `false`. Stays synchronous while the listeners do,
+ * so queries inside a bun:sqlite transaction are still issued in time.
+ */
+function fire(
+	listeners: readonly Listener[],
+	target: unknown,
+	from = 0,
+): boolean | Promise<boolean> {
+	for (let i = from; i < listeners.length; i++) {
+		const result = (listeners[i] as Listener)(target);
+		if (result instanceof Promise) {
+			return result.then((value) =>
+				value === false ? false : fire(listeners, target, i + 1),
+			);
+		}
+		if (result === false) return false;
+	}
+	return true;
 }
 
 function resolvePrimaryKey(
@@ -141,24 +172,31 @@ function resolvePrimaryKey(
  * const users = sqliteTable("users", {
  *   id: integer().primaryKey({ autoIncrement: true }),
  *   name: text().notNull(),
+ *   password: text().notNull(),
  * });
  * const db = drizzle(new Database("app.sqlite"));
- * const User = defineModel(db, users);
+ * const User = defineModel(db, users, {
+ *   hidden: ["password"],
+ *   events: { creating: (values) => void (values.password = hash(values.password)) },
+ * });
  *
- * const user = await User.create({ name: "Ada" }); // user.id assigned by SQLite
- * user.name = "Ada Lovelace";
- * await user.save(); // UPDATE users SET name = ? WHERE id = ?
+ * const user = await User.create({ name: "Ada", password: "secret" });
+ * if (user) {
+ *   user.name = "Ada Lovelace";
+ *   await user.save(); // UPDATE users SET name = ? WHERE id = ?
+ * }
  * ```
  */
 export function defineModel<
 	TDb extends AnyDatabase,
 	TTable extends TableFor<TDb>,
 	TPk extends Column = PrimaryKeyColumn<TTable>,
+	const THidden extends keyof RowOf<TTable> & string = never,
 >(
 	db: TDb,
-	table: TTable,
-	options: DefineModelOptions<TPk> = {},
-): Model<TTable, TDb, TPk["_"]["data"]> {
+	table: TTable & CheckReservedColumns<TTable>,
+	options: DefineModelOptions<TTable, TDb, TPk, THidden> = {},
+): Model<TTable, TDb, TPk["_"]["data"], THidden> {
 	const columns = getTableColumns(table as Table) as Record<string, Column>;
 	const tableName = getTableName(table as Table);
 	for (const key of Object.keys(columns)) {
@@ -171,8 +209,23 @@ export function defineModel<
 	const pkKey = resolvePrimaryKey(table as Table, columns, options.primaryKey);
 	const pkColumn = columns[pkKey] as Column;
 	const columnKeys = Object.keys(columns);
+	const hidden = new Set<string>(options.hidden);
+	for (const key of hidden) {
+		if (!Object.hasOwn(columns, key)) {
+			throw new Error(
+				`defineModel: hidden column "${key}" is not a column of "${tableName}"`,
+			);
+		}
+	}
+	const listeners = {} as Record<ModelEvent, Listener[]>;
+	for (const event of EVENTS) {
+		const given = options.events?.[event];
+		listeners[event] = (
+			given === undefined ? [] : Array.isArray(given) ? [...given] : [given]
+		) as Listener[];
+	}
 
-	type Instance = ModelInstance<TTable, TDb>;
+	type Instance = ModelInstance<TTable, TDb, THidden>;
 	const runner = (opts?: QueryOptions): Runner => opts?.tx ?? db;
 	const byKey = (id: unknown): SQL => eq(pkColumn, id);
 
@@ -193,29 +246,40 @@ export function defineModel<
 			return dirty;
 		},
 		save(this: Instance, opts?: QueryOptions) {
-			return settle(opts, () => {
-				const dirty = this.getDirty();
-				if (Object.keys(dirty).length === 0) return this;
-				const state = stateOf(this);
-				const query = runner(opts)
-					.update(table)
-					.set(dirty)
-					.where(byKey(state.original[pkKey]))
-					.returning();
-				return then(execute(query), (rows) =>
-					reload(this, rows, state.original[pkKey]),
-				);
-			});
+			return settle(opts, () =>
+				then(fire(listeners.saving, this), (ok) => {
+					if (!ok) return false;
+					if (!this.isDirty()) return this;
+					return then(fire(listeners.updating, this), (ok) => {
+						if (!ok) return false;
+						// Listeners may have changed (or reverted) attributes.
+						const dirty = this.getDirty();
+						if (Object.keys(dirty).length === 0) return this;
+						const state = stateOf(this);
+						const query = runner(opts)
+							.update(table)
+							.set(dirty)
+							.where(byKey(state.original[pkKey]))
+							.returning();
+						return then(execute(query), (rows) =>
+							reload(this, rows, state.original[pkKey]),
+						);
+					});
+				}),
+			);
 		},
 		delete(this: object, opts?: QueryOptions) {
-			return settle(opts, () => {
-				const { original } = stateOf(this);
-				const query = runner(opts)
-					.delete(table)
-					.where(byKey(original[pkKey]))
-					.returning();
-				return then(execute(query), () => undefined);
-			});
+			return settle(opts, () =>
+				then(fire(listeners.deleting, this), (ok) => {
+					if (!ok) return false;
+					const { original } = stateOf(this);
+					const query = runner(opts)
+						.delete(table)
+						.where(byKey(original[pkKey]))
+						.returning();
+					return then(execute(query), () => true);
+				}),
+			);
 		},
 		refresh(this: Instance, opts?: QueryOptions) {
 			return settle(opts, () => {
@@ -229,7 +293,11 @@ export function defineModel<
 			});
 		},
 		toJSON(this: object): Row {
-			return { ...stateOf(this).attributes };
+			const json: Row = {};
+			for (const [key, value] of Object.entries(stateOf(this).attributes)) {
+				if (!hidden.has(key)) json[key] = value;
+			}
+			return json;
 		},
 	};
 
@@ -263,7 +331,7 @@ export function defineModel<
 		condition: SQL | undefined,
 	) => runner(opts).select().from(table).where(condition);
 
-	const model: Model<TTable, TDb, TPk["_"]["data"]> = {
+	const model: Model<TTable, TDb, TPk["_"]["data"], THidden> = {
 		db,
 		table,
 		tableName,
@@ -294,24 +362,56 @@ export function defineModel<
 							rows[0] ? hydrate(rows[0]) : null,
 						),
 					),
+				update: (values, opts) =>
+					settle(opts, () => {
+						const query = runner(opts)
+							.update(table)
+							.set(values)
+							.where(condition)
+							.returning({ key: pkColumn });
+						return then(execute(query), (rows) => rows.length);
+					}),
+				delete: (opts) =>
+					settle(opts, () => {
+						const query = runner(opts)
+							.delete(table)
+							.where(condition)
+							.returning({ key: pkColumn });
+						return then(execute(query), (rows) => rows.length);
+					}),
 			};
 		},
 		create(values, opts) {
 			return settle(opts, () => {
 				const input = { ...(values as Row) };
-				if (input[pkKey] === "") {
-					throw new Error(
-						`Primary key "${pkKey}" must not be an empty string; omit it to use the table's default`,
-					);
-				}
-				const query = runner(opts).insert(table).values(input).returning();
-				return then(execute(query), (rows) => hydrate(rows[0] as Row));
+				return then(fire(listeners.saving, input), (ok) => {
+					if (!ok) return false;
+					return then(fire(listeners.creating, input), (ok) => {
+						if (!ok) return false;
+						if (input[pkKey] === "") {
+							throw new Error(
+								`Primary key "${pkKey}" must not be an empty string; omit it to use the table's default`,
+							);
+						}
+						const query = runner(opts).insert(table).values(input).returning();
+						return then(execute(query), (rows) => hydrate(rows[0] as Row));
+					});
+				});
 			});
 		},
 		query(opts) {
 			return runner(opts).select().from(table);
 		},
 		hydrate: (row) => hydrate(row as Row),
+		on(event, listener) {
+			const list = listeners[event];
+			const entry = listener as Listener;
+			list.push(entry);
+			return () => {
+				const index = list.indexOf(entry);
+				if (index !== -1) list.splice(index, 1);
+			};
+		},
 	};
 	return model;
 }

@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `defineModel(db, table, { primaryKey? })` for SQLite (`drizzle-orm/bun-sqlite`) and Postgres (`drizzle-orm/bun-sql`), with row types inferred from the table: `find(id)`, `findOrFail(id)` (throws `ModelNotFoundError` with `table` and `id`), `where(condition).get()` / `.first()`, `create(values)` (returns the persisted row including the database-assigned key, never mutates `values`, rejects an empty-string key), `query()` (raw Drizzle `select().from(table)`) and `hydrate(row)` (#80)
 - Model instances: columns as properties, `isDirty(key?)`, `getDirty()`, `save()` (writes only dirty columns; no query when clean), `delete()`, `refresh()`, `toJSON()` (#80)
+- Model events `saving`, `creating`, `updating` and `deleting`, registered with `defineModel(db, table, { events })` or `Model.on(event, listener)` (which returns a remover). Listeners may be async and run in registration order; returning `false` cancels the write, so `create()` resolves to the instance or `false`, `save()` to the instance or `false`, and `delete()` to `true` or `false`; a throwing listener rejects the call. Only instance operations fire events (#81)
+- `where(condition).update(values)` and `where(condition).delete()` bulk writes, returning the number of rows affected; they fire no model events (#81)
+- `hidden: [...]` option: columns that are loaded and usable but left out of `toJSON()` / `JSON.stringify`, also in `toJSON()`'s return type (#81)
+- A column whose JS key shadows an instance method (`save`, `delete`, `toJSON`, `isDirty`, `getDirty`, `refresh`) is now a type error in `defineModel()`, naming the column, in addition to the runtime error; exported `ReservedColumnName` type (#81)
 - Every model method accepts `{ tx }` to run on a Drizzle transaction; with `tx`, errors are thrown synchronously so synchronous bun:sqlite transactions roll back (#80)
 
 ## [0.2.0] - 2026-09-21

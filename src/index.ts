@@ -2,7 +2,8 @@
  * @bunary/orm - ORM for Bunary
  *
  * Laravel-style models on top of Drizzle: define your tables with Drizzle,
- * wrap them with `defineModel()` and get CRUD with dirty tracking. Supports
+ * wrap them with `defineModel()` and get CRUD with dirty tracking, model
+ * events and hidden columns. Supports
  * SQLite (`drizzle-orm/bun-sqlite`) and Postgres (`drizzle-orm/bun-sql`).
  *
  * @example
@@ -20,6 +21,7 @@
  * const User = defineModel(drizzle(new Database("app.sqlite")), users);
  *
  * const user = await User.create({ email: "ada@example.com" });
+ * if (!user) throw new Error("cancelled by a listener");
  * user.email = "ada@lovelace.dev";
  * await user.save();
  * const found = await User.where(eq(users.email, "ada@lovelace.dev")).first();
@@ -30,13 +32,19 @@ export { ModelNotFoundError } from "./errors.js";
 export { defineModel } from "./model.js";
 export type {
 	AnyDatabase,
+	CheckReservedColumns,
 	DefineModelOptions,
 	InstanceMethods,
 	Model,
+	ModelEvent,
+	ModelEventTargets,
 	ModelInstance,
+	ModelListener,
+	ModelListeners,
 	NewRowOf,
 	PrimaryKeyColumn,
 	QueryOptions,
+	ReservedColumnName,
 	RowOf,
 	SelectQuery,
 	TableFor,
