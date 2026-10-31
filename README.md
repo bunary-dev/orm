@@ -1,6 +1,6 @@
 # @bunary/orm
 
-Laravel-style models for Bunary on [Drizzle](https://orm.drizzle.team): `defineModel()` wraps a Drizzle table with `find` / `findOrFail` / `where` / `create`, and instances with dirty tracking, `save()`, `delete()` and `refresh()`; model events (`creating` / `updating` / `saving` / `deleting`, cancellable by returning `false`), `hidden` columns left out of `toJSON()`, soft deletes (`softDeletes: true`, `withTrashed()` / `onlyTrashed()`, `restore()`, `forceDelete()`) and named scopes (`User.active().get()`). SQLite (`bun:sqlite`) and Postgres (`Bun.SQL`); migrations via drizzle-kit. Full reference: [docs/index.md](./docs/index.md).
+Laravel-style models for Bunary on [Drizzle](https://orm.drizzle.team): `defineModel()` wraps a Drizzle table with `find` / `findOrFail` / `where` / `create`, and instances with dirty tracking, `save()`, `delete()` and `refresh()`; model events (`creating` / `updating` / `saving` / `deleting`, cancellable by returning `false`), `hidden` columns left out of `toJSON()`, soft deletes (`softDeletes: true`, `withTrashed()` / `onlyTrashed()`, `restore()`, `forceDelete()`) named scopes (`User.active().get()`) and eager loading of Drizzle relations as model instances (`User.with({ posts: Post }).get()`). SQLite (`bun:sqlite`) and Postgres (`Bun.SQL`); migrations via drizzle-kit. Full reference: [docs/index.md](./docs/index.md).
 
 Requires Bun ≥ 1.4.0.
 
@@ -10,7 +10,7 @@ Requires Bun ≥ 1.4.0.
 bun add @bunary/orm drizzle-orm
 ```
 
-`drizzle-orm` is a peer dependency.
+`drizzle-orm` is a peer dependency. `@bunary/core` is an optional peer: with it, `ormProvider` (from `@bunary/orm/provider`) builds the Drizzle database from the `database` config key and binds it under `DatabaseToken`.
 
 ## Quick start
 
@@ -33,7 +33,7 @@ user.name = "Ada Lovelace";
 await user.save(); // updates only the dirty columns
 ```
 
-For Postgres, events, hidden columns, soft deletes, scopes, reserved column names, bulk `where().update()` / `.delete()`, transactions (`{ tx }`), the raw Drizzle escape hatch, drizzle-kit migrations and upgrading from 0.2.x, see [docs/index.md](./docs/index.md).
+For Postgres, relations and `with()`, the `@bunary/core` provider, events, hidden columns, soft deletes, scopes, reserved column names, bulk `where().update()` / `.delete()`, transactions (`{ tx }`), the raw Drizzle escape hatch, drizzle-kit migrations and upgrading from 0.2.x, see [docs/index.md](./docs/index.md).
 
 ## License
 

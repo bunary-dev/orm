@@ -6,6 +6,8 @@ import type {
 	Column,
 	InferInsertModel,
 	InferSelectModel,
+	Many,
+	Relation,
 	SQL,
 	Table,
 } from "drizzle-orm";
@@ -146,6 +148,7 @@ export type ReservedScopeName =
 	| "forceDelete"
 	| "withTrashed"
 	| "onlyTrashed"
+	| "with"
 	| "then"
 	| "constructor";
 
@@ -291,6 +294,7 @@ export interface InstanceMethods<
 	TTable extends Table,
 	TDb extends AnyDatabase,
 	THidden extends string = never,
+	TLoaded extends object = NoRelations,
 > {
 	/** Whether `key` (or, without a key, any column) differs from the persisted value. */
 	isDirty(key?: keyof RowOf<TTable> & string): boolean;
@@ -315,8 +319,11 @@ export interface InstanceMethods<
 	 * @throws {ModelNotFoundError} if the row no longer exists
 	 */
 	refresh(options?: QueryOptions<TDb>): Promise<this>;
-	/** A plain copy of the current attributes, without the hidden columns. */
-	toJSON(): Omit<RowOf<TTable>, THidden>;
+	/**
+	 * A plain copy of the current attributes, without the hidden columns,
+	 * plus the relations loaded with `with()`, each by its own `toJSON()`.
+	 */
+	toJSON(): Omit<RowOf<TTable>, THidden> & RelationsJson<TLoaded>;
 }
 
 /** Instance methods of a model defined with `softDeletes: true`. */
@@ -336,19 +343,121 @@ export interface SoftDeleteInstanceMethods<TDb extends AnyDatabase> {
 	forceDelete(options?: QueryOptions<TDb>): Promise<boolean>;
 }
 
-/** A row wrapped with dirty tracking: columns are readable and writable properties. */
+/**
+ * A row wrapped with dirty tracking: columns are readable and writable
+ * properties; relations loaded with `with()` are read-only properties.
+ */
 export type ModelInstance<
 	TTable extends Table,
 	TDb extends AnyDatabase = AnyDatabase,
 	THidden extends string = never,
 	TSoft extends boolean = false,
+	TLoaded extends object = NoRelations,
 > = RowOf<TTable> &
-	InstanceMethods<TTable, TDb, THidden> &
-	(TSoft extends true ? SoftDeleteInstanceMethods<TDb> : unknown);
+	InstanceMethods<TTable, TDb, THidden, TLoaded> &
+	(TSoft extends true ? SoftDeleteInstanceMethods<TDb> : unknown) &
+	Readonly<TLoaded>;
+
+/** No relations loaded. */
+export type NoRelations = Record<never, never>;
 
 /**
- * A model query, returned by `Model.where()`, the trashed filters and
- * scopes. Queries are immutable: every chained call returns a new query.
+ * The relational config `drizzle({ schema })` extracted from the database's
+ * schema (tables and `relations()`), or `never` without a schema.
+ */
+type RelationalSchemaOf<TDb extends AnyDatabase> = TDb extends {
+	_: { schema: infer TSchema };
+}
+	? NonNullable<TSchema>
+	: never;
+
+/**
+ * The Drizzle `relations()` of `TTable` in the schema of `TDb`, by relation
+ * name; none when the database was created without a schema.
+ */
+export type RelationsOf<TDb extends AnyDatabase, TTable extends Table> = [
+	{
+		[K in keyof RelationalSchemaOf<TDb>]: RelationalSchemaOf<TDb>[K] extends {
+			dbName: TTable["_"]["name"];
+			relations: infer TRelations;
+		}
+			? TRelations
+			: never;
+	}[keyof RelationalSchemaOf<TDb>],
+] extends [infer TRelations extends Record<string, Relation>]
+	? [TRelations] extends [never]
+		? NoRelations
+		: TRelations
+	: NoRelations;
+
+/** A model whose table is named `TTableName`, as accepted by `with()`. */
+export interface RelatedModel<TTableName extends string = string> {
+	readonly table: { readonly _: { readonly name: TTableName } };
+	hydrate(row: any): object;
+}
+
+/**
+ * The argument of `with()`: per relation of `TTable`, the model to hydrate
+ * its rows with (one for the relation's table).
+ */
+export type WithRelations<TDb extends AnyDatabase, TTable extends Table> = {
+	[K in keyof RelationsOf<TDb, TTable>]?: RelatedModel<
+		RelationsOf<TDb, TTable>[K] extends Relation<infer TName> ? TName : never
+	>;
+};
+
+/**
+ * Part of the constraint on the argument of `with()`: a key that is not a
+ * relation of the table fails to type-check.
+ */
+export type CheckRelationNames<
+	TDb extends AnyDatabase,
+	TTable extends Table,
+	TWith,
+> = {
+	[K in Exclude<keyof TWith, keyof RelationsOf<TDb, TTable>>]: never;
+};
+
+/** The instance type a model hydrates. */
+export type InstanceOf<TModel> = TModel extends {
+	hydrate(row: any): infer TInstance;
+}
+	? TInstance
+	: never;
+
+/**
+ * The relations `with(relations)` loads onto each instance: an array of
+ * related instances for a `many()` relation, and the related instance for a
+ * `one()` relation, or `null` when its key columns are nullable.
+ */
+export type LoadedRelations<
+	TDb extends AnyDatabase,
+	TTable extends Table,
+	TWith,
+> = {
+	-readonly [K in keyof TWith & keyof RelationsOf<TDb, TTable>]: RelationsOf<
+		TDb,
+		TTable
+	>[K] extends Many<any>
+		? InstanceOf<TWith[K]>[]
+		: RelationsOf<TDb, TTable>[K] extends { isNullable: false }
+			? InstanceOf<TWith[K]> | null
+			: InstanceOf<TWith[K]>;
+};
+
+/** What loaded relations serialize to in `toJSON()`. */
+export type RelationsJson<TLoaded> = {
+	[K in keyof TLoaded]: TLoaded[K] extends readonly (infer TItem)[]
+		? JsonOf<TItem>[]
+		: JsonOf<TLoaded[K]>;
+};
+
+type JsonOf<T> = T extends { toJSON(): infer TJson } ? TJson : T;
+
+/**
+ * A model query, returned by `Model.where()`, `Model.with()`, the trashed
+ * filters and scopes. Queries are immutable: every chained call returns a
+ * new query.
  */
 export type ModelQuery<
 	TTable extends Table,
@@ -356,15 +465,19 @@ export type ModelQuery<
 	THidden extends string = never,
 	TSoft extends boolean = false,
 	TScopes extends ScopeMap = NoScopes,
-> = QueryMethods<TTable, TDb, THidden, TSoft, TScopes> &
+	TId = PrimaryKeyColumn<TTable>["_"]["data"],
+	TLoaded extends object = NoRelations,
+> = QueryMethods<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded> &
 	(TSoft extends true
-		? SoftDeleteQueryMethods<TTable, TDb, THidden, TSoft, TScopes>
+		? SoftDeleteQueryMethods<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded>
 		: unknown) & {
 		[K in keyof TScopes]: TScopes[K] extends (
 			query: any,
 			...args: infer TArgs
 		) => any
-			? (...args: TArgs) => ModelQuery<TTable, TDb, THidden, TSoft, TScopes>
+			? (
+					...args: TArgs
+				) => ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded>
 			: never;
 	};
 
@@ -375,19 +488,50 @@ export interface QueryMethods<
 	THidden extends string = never,
 	TSoft extends boolean = false,
 	TScopes extends ScopeMap = NoScopes,
+	TId = PrimaryKeyColumn<TTable>["_"]["data"],
+	TLoaded extends object = NoRelations,
 > {
 	/** Add a Drizzle condition, combined with the query's others by `AND`. */
 	where(
 		condition: SQL | undefined,
-	): ModelQuery<TTable, TDb, THidden, TSoft, TScopes>;
+	): ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded>;
+	/**
+	 * Eager-load relations defined with Drizzle `relations()`: per relation
+	 * name, the model to hydrate the related rows with. See
+	 * {@link ModelMethods.with}.
+	 */
+	with<const TWith extends WithRelations<TDb, TTable>>(
+		relations: TWith & CheckRelationNames<TDb, TTable, TWith>,
+	): ModelQuery<
+		TTable,
+		TDb,
+		THidden,
+		TSoft,
+		TScopes,
+		TId,
+		TLoaded & LoadedRelations<TDb, TTable, TWith>
+	>;
 	/** Every matching row. */
 	get(
 		options?: QueryOptions<TDb>,
-	): Promise<ModelInstance<TTable, TDb, THidden, TSoft>[]>;
+	): Promise<ModelInstance<TTable, TDb, THidden, TSoft, TLoaded>[]>;
 	/** The first matching row, or `null`. */
 	first(
 		options?: QueryOptions<TDb>,
-	): Promise<ModelInstance<TTable, TDb, THidden, TSoft> | null>;
+	): Promise<ModelInstance<TTable, TDb, THidden, TSoft, TLoaded> | null>;
+	/** The matching row with this primary key, or `null`. */
+	find(
+		id: TId,
+		options?: QueryOptions<TDb>,
+	): Promise<ModelInstance<TTable, TDb, THidden, TSoft, TLoaded> | null>;
+	/**
+	 * The matching row with this primary key.
+	 * @throws {ModelNotFoundError} if there is none
+	 */
+	findOrFail(
+		id: TId,
+		options?: QueryOptions<TDb>,
+	): Promise<ModelInstance<TTable, TDb, THidden, TSoft, TLoaded>>;
 	/**
 	 * Bulk update: set `values` on every matching row (every row when the
 	 * condition is `undefined`) and return how many were updated.
@@ -412,11 +556,13 @@ export interface SoftDeleteQueryMethods<
 	THidden extends string = never,
 	TSoft extends boolean = true,
 	TScopes extends ScopeMap = NoScopes,
+	TId = PrimaryKeyColumn<TTable>["_"]["data"],
+	TLoaded extends object = NoRelations,
 > {
 	/** Include soft-deleted rows. */
-	withTrashed(): ModelQuery<TTable, TDb, THidden, TSoft, TScopes>;
+	withTrashed(): ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded>;
 	/** Only soft-deleted rows. */
-	onlyTrashed(): ModelQuery<TTable, TDb, THidden, TSoft, TScopes>;
+	onlyTrashed(): ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded>;
 	/**
 	 * Bulk restore: clear `deletedAt` on every matching soft-deleted row and
 	 * return how many were restored. Fires no model events.
@@ -445,11 +591,11 @@ export type Model<
 > = ModelMethods<TTable, TDb, TId, THidden, TSoft, TScopes> &
 	(TSoft extends true
 		? Pick<
-				SoftDeleteQueryMethods<TTable, TDb, THidden, TSoft, TScopes>,
+				SoftDeleteQueryMethods<TTable, TDb, THidden, TSoft, TScopes, TId>,
 				"withTrashed" | "onlyTrashed"
 			>
 		: unknown) &
-	ScopeMethods<TScopes, ModelQuery<TTable, TDb, THidden, TSoft, TScopes>>;
+	ScopeMethods<TScopes, ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId>>;
 
 /** Members of every model. */
 export interface ModelMethods<
@@ -482,7 +628,27 @@ export interface ModelMethods<
 	/** Filter by a Drizzle condition, e.g. `where(eq(users.email, email))`. */
 	where(
 		condition: SQL | undefined,
-	): ModelQuery<TTable, TDb, THidden, TSoft, TScopes>;
+	): ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId>;
+	/**
+	 * Eager-load relations defined with Drizzle `relations()` (and passed to
+	 * `drizzle({ schema })`): per relation name, the model to hydrate the
+	 * related rows with, e.g. `User.with({ posts: Post }).get()`. Each
+	 * relation is loaded with one extra query; the related model leaves out
+	 * its soft-deleted rows.
+	 * @throws {Error} if a name is not a relation of the table, or a model is
+	 * not one for the relation's table
+	 */
+	with<const TWith extends WithRelations<TDb, TTable>>(
+		relations: TWith & CheckRelationNames<TDb, TTable, TWith>,
+	): ModelQuery<
+		TTable,
+		TDb,
+		THidden,
+		TSoft,
+		TScopes,
+		TId,
+		LoadedRelations<TDb, TTable, TWith>
+	>;
 	/**
 	 * Fire `saving` and `creating`, then insert a row and return it as
 	 * persisted, including database-assigned values such as the primary key.

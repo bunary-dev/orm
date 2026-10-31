@@ -4,7 +4,9 @@ Laravel-style models for Bunary, built on [Drizzle](https://orm.drizzle.team).
 
 You define tables with Drizzle; `defineModel()` wraps a table in a model with
 `find` / `create` / `save` / `delete`, dirty tracking, model events, hidden
-columns, soft deletes, named scopes and a typed not-found error. Everything else (joins, aggregates, migrations) is plain Drizzle.
+columns, soft deletes, named scopes, eager loading of Drizzle relations
+(`with()`) and a typed not-found error. With `@bunary/core`, `ormProvider`
+builds the database from the `database` config key. Everything else (joins, aggregates, migrations) is plain Drizzle.
 
 Supported dialects:
 
@@ -21,6 +23,9 @@ Supported dialects:
 bun add @bunary/orm drizzle-orm
 bun add -d drizzle-kit # migrations
 ```
+
+`@bunary/core` (^1.0.0-rc.1) is an optional peer, needed only for
+[`ormProvider`](#bunarycore-integration).
 
 Requires Bun ≥ 1.4.0.
 
@@ -482,14 +487,81 @@ await User.active().update({ newsletter: true }); // bulk writes too
 - Scope names may not shadow model or query members: `db`, `table`,
   `tableName`, `find`, `findOrFail`, `where`, `create`, `query`, `hydrate`,
   `on`, `get`, `first`, `update`, `delete`, `restore`, `forceDelete`,
-  `withTrashed`, `onlyTrashed`, `then` (or `constructor`). Such a name is a
+  `withTrashed`, `onlyTrashed`, `with`, `then` (or `constructor`). Such a name is a
   type error naming the scope, and `defineModel()` throws for it. The list is
   exported as the `ReservedScopeName` type.
+
+## Relations (eager loading)
+
+Relations are plain Drizzle [`relations()`](https://orm.drizzle.team/docs/relations),
+passed to `drizzle()` in its `schema`. `with()` eager-loads them and hydrates
+the related rows with the model you give for each relation, so they are
+model instances (dirty tracking, `save()`, `toJSON()`, …), not plain rows:
+
+```typescript
+import { eq, relations } from "drizzle-orm";
+
+const users = sqliteTable("users", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  name: text().notNull(),
+});
+const posts = sqliteTable("posts", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  authorId: integer("author_id").notNull(),
+  title: text().notNull(),
+  deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+});
+const usersRelations = relations(users, ({ many }) => ({ posts: many(posts) }));
+const postsRelations = relations(posts, ({ one }) => ({
+  author: one(users, { fields: [posts.authorId], references: [users.id] }),
+}));
+
+const db = drizzle({
+  client: new Database("app.sqlite"),
+  schema: { users, posts, usersRelations, postsRelations },
+});
+const User = defineModel(db, users);
+const Post = defineModel(db, posts, { softDeletes: true });
+
+const authors = await User.with({ posts: Post }).get();
+authors[0]?.posts; // Post instances (one-to-many: an array, [] when none)
+
+const post = await Post.with({ author: User }).find(1);
+post?.author.name; // a User instance (many-to-one)
+
+const ada = await User.with({ posts: Post }).where(eq(users.name, "Ada")).first();
+const sure = await Post.with({ author: User }).findOrFail(1);
+```
+
+- `with({ relation: Model })` is available on the model and on its queries,
+  and chains with `where()`, scopes, `withTrashed()` / `onlyTrashed()` and
+  further `with()` calls. A model query has `get()`, `first()`, `find(id)`
+  and `findOrFail(id)`, which all eager-load.
+- Each relation costs one extra query (`WHERE key IN (...)`) however many
+  rows were loaded; none when no row matched.
+- The related rows are loaded through the related model, so **its
+  soft-deleted rows are left out**: a soft-deleted post is not in
+  `user.posts`, and a post whose author is soft-deleted has `author: null`.
+- Types come from the relation config: a `many()` relation is an array of the
+  related model's instances; a `one()` relation is the instance, or
+  `instance | null` when its key columns are nullable (as in Drizzle's own
+  relational queries). A name that is not a relation of the table, or a
+  model for another table, is a type error and throws when `with()` is
+  called; so does a database created without a `schema`.
+- Loaded relations are read-only, enumerable properties of the instance and
+  are included in `toJSON()`, each through its own model's `toJSON()` (so the
+  related model's `hidden` columns stay out). `save()` and `refresh()` leave
+  them as they are.
+- A relation may not be named after a column or an instance method
+  (`with()` throws).
+- One level per call: nested eager loading (`posts.comments`) is not
+  supported; load it from the related instances or use Drizzle's
+  `db.query` for deep trees.
 
 ## Transactions
 
 `create()`, `save()`, `delete()`, `restore()`, `forceDelete()`, bulk `where().update()` / `.delete()` / `.restore()` / `.forceDelete()` and every read (`find`, `findOrFail`,
-`where().get/first`, `refresh`, `query`) accept `{ tx }`: a Drizzle
+`where().get/first/find/findOrFail`, eager loads with `with()`, `refresh`, `query`) accept `{ tx }`: a Drizzle
 transaction (or database) of the same dialect, used instead of the model's
 `db`.
 
@@ -607,6 +679,66 @@ migrate(db, { migrationsFolder: "./drizzle" });
 // Postgres: import from "drizzle-orm/bun-sql/migrator" and `await migrate(...)`
 ```
 
+## @bunary/core integration
+
+`@bunary/core` is an optional peer. With it, `ormProvider` builds the Drizzle
+database from the **`database`** key of the Bunary config and binds it under
+`DatabaseToken` in the app; both live on the `@bunary/orm/provider` subpath
+so the main entry never needs core:
+
+```typescript
+// bunary.config.ts
+import { defineConfig } from "@bunary/core";
+
+export default defineConfig({
+  app: { name: "my-app" },
+  database: { dialect: "sqlite", path: "app.sqlite" },
+  // or: database: { dialect: "postgres", url: process.env.DATABASE_URL! },
+});
+```
+
+```typescript
+import { createApp } from "@bunary/core";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import { defineModel } from "@bunary/orm";
+import { DatabaseToken, ormProvider } from "@bunary/orm/provider";
+import config from "./bunary.config";
+import * as schema from "./schema"; // tables and relations()
+
+const app = await createApp({
+  config,
+  providers: [ormProvider({ schema })],
+}).boot();
+
+const db = app.get(DatabaseToken) as BunSQLiteDatabase<typeof schema>;
+export const User = defineModel(db, schema.users);
+```
+
+| `database.dialect` | Other keys      | Builds                                          |
+| ------------------ | --------------- | ----------------------------------------------- |
+| `"sqlite"`         | `path` (or `":memory:"`) | `drizzle({ client: new Database(path), schema })` from `drizzle-orm/bun-sqlite` |
+| `"postgres"`       | `url`           | `drizzle({ client: new SQL(url), schema })` from `drizzle-orm/bun-sql` |
+
+- `ormProvider({ schema? })`: pass your Drizzle schema (tables and
+  `relations()`) to use [`with()`](#relations-eager-loading) and `db.query`.
+- The database is built in the provider's `register()`, so it is bound before
+  any provider boots. A missing or invalid `database` key rejects
+  `app.boot()` with core's `BunaryError` (e.g. `BunaryConfig: "database" is
+  required by ormProvider`, `BunaryConfig: "database.dialect" must be
+  "sqlite" or "postgres"`).
+- Every app gets its own database; there is no global store. Models still
+  take the database explicitly: read it from `DatabaseToken` and pass it to
+  `defineModel()`. `DatabaseToken` is typed as `AnyDatabase`; cast it to the
+  Drizzle database type of your dialect and schema
+  (`BunSQLiteDatabase<typeof schema>` or `BunSQLDatabase<typeof schema>`).
+- `@bunary/orm` adds `database?: DatabaseConfig` to core's `BunaryConfig` in
+  its shipped declarations, so `defineConfig({ database })` is typed and
+  unknown keys (or a `path` on a Postgres config) are type errors. The
+  augmentation does not import `@bunary/core`, so projects without core
+  typecheck as before. `DatabaseConfig` (`SqliteDatabaseConfig |
+  PostgresDatabaseConfig`) is exported from `@bunary/orm` and
+  `@bunary/orm/provider`.
+
 ## SQL safety
 
 The orm never builds SQL strings. Every query goes through Drizzle's query
@@ -619,8 +751,9 @@ values are bound as parameters. Conditions are Drizzle expressions; inside
 
 | Error                | Thrown by                                     | Properties    |
 | -------------------- | --------------------------------------------- | ------------- |
-| `ModelNotFoundError` | `findOrFail()`, `save()` and `refresh()` on a deleted row | `table`, `id` |
-| `Error`              | `defineModel()` (invalid definition, reserved column or scope name, unknown hidden key, `softDeletes` without `deletedAt`), `create()` (empty-string key), a scope that does not return a query | |
+| `ModelNotFoundError` | `findOrFail()` (on the model or a query), `save()` and `refresh()` on a deleted row | `table`, `id` |
+| `Error`              | `defineModel()` (invalid definition, reserved column or scope name, unknown hidden key, `softDeletes` without `deletedAt`), `create()` (empty-string key), a scope that does not return a query, `with()` (unknown relation, a model for another table, a relation named after a column or method, a database without a schema) | |
+| `BunaryError` (from `@bunary/core`) | `app.boot()` with `ormProvider` and a missing or invalid `database` config | |
 
 Errors thrown by event listeners propagate unchanged.
 
@@ -631,14 +764,16 @@ Database errors (constraint violations, …) are passed through from the driver.
 | Export                         | Description                                          |
 | ------------------------------ | ---------------------------------------------------- |
 | `Model<TTable, TDb, TId, THidden, TSoft, TScopes>` | What `defineModel()` returns (`ModelMethods` plus soft-delete and scope methods) |
-| `ModelInstance<TTable, TDb, THidden, TSoft>` | A row plus the instance methods (`InstanceMethods`, `SoftDeleteInstanceMethods`) |
+| `ModelInstance<TTable, TDb, THidden, TSoft, TLoaded>` | A row plus the instance methods (`InstanceMethods`, `SoftDeleteInstanceMethods`) and the relations loaded with `with()` |
 | `RowOf<TTable>` / `NewRowOf<TTable>` | Select / insert types of a table               |
 | `QueryOptions<TDb>`            | `{ tx? }`                                            |
 | `DefineModelOptions`           | `{ primaryKey?, hidden?, events?, softDeletes?, scopes? }` |
 | `ModelEvent`                   | `"creating" \| "updating" \| "saving" \| "deleting"` |
 | `ModelListener<T>`, `ModelListeners`, `ModelEventTargets` | A listener, the `events` option, what each event receives |
 | `ReservedColumnName`, `CheckReservedColumns` | The reserved column keys and the check `defineModel()` applies |
-| `ModelQuery<TTable, TDb, THidden, TSoft, TScopes>` | What `where()`, `withTrashed()` / `onlyTrashed()` and scopes return (`QueryMethods`, `SoftDeleteQueryMethods`) |
+| `ModelQuery<TTable, TDb, THidden, TSoft, TScopes, TId, TLoaded>` | What `where()`, `with()`, `withTrashed()` / `onlyTrashed()` and scopes return (`QueryMethods`, `SoftDeleteQueryMethods`) |
+| `RelationsOf<TDb, TTable>`, `WithRelations`, `CheckRelationNames`, `RelatedModel`, `LoadedRelations`, `RelationsJson`, `InstanceOf`, `NoRelations` | A table's Drizzle relations, the argument of `with()`, and what it loads |
+| `DatabaseConfig`, `SqliteDatabaseConfig`, `PostgresDatabaseConfig` | The `database` config key |
 | `Scope`, `ScopeMap`, `ScopeMethods`, `ScopesOf`, `NoScopes` | A scope, the `scopes` option, the methods it adds |
 | `ReservedScopeName`, `CheckReservedScopes`, `ScopeConstraint` | The reserved scope names and the check `defineModel()` applies |
 | `SupportsSoftDeletes<TTable>`, `SoftDeletesRequiresDeletedAt` | Whether a table can soft-delete, and the type error shown when it cannot |
@@ -658,7 +793,7 @@ drivers with Drizzle. There are no compatibility shims.
 
 | 0.2                                              | Now                                                    |
 | ------------------------------------------------ | ------------------------------------------------------ |
-| `setOrmConfig()`, `defineOrmConfig()`, `orm` key in `@bunary/core` config | create a Drizzle `db` and pass it to `defineModel()` |
+| `setOrmConfig()`, `defineOrmConfig()`, `orm` key in `@bunary/core` config | create a Drizzle `db` and pass it to `defineModel()`, or use the `database` key with `ormProvider` ([core integration](#bunarycore-integration)) |
 | `Model.table("users").find(1)`                   | `defineModel(db, users).find(1)`                       |
 | `class Users extends BaseModel`                  | `const User = defineModel(db, users)`                  |
 | `.where("age", ">", 18).all()`                   | `.where(gt(users.age, 18)).get()`                      |

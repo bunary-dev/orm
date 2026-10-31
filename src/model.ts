@@ -7,10 +7,18 @@ import {
 	eq,
 	getTableColumns,
 	getTableName,
+	getTableUniqueName,
+	inArray,
+	is,
 	isNotNull,
 	isNull,
+	Many,
+	normalizeRelation,
+	or,
+	type Relation,
 	type SQL,
 	type Table,
+	type TablesRelationalConfig,
 } from "drizzle-orm";
 import { ModelNotFoundError } from "./errors.js";
 import type {
@@ -69,6 +77,7 @@ const RESERVED_SCOPES = new Set<string>([
 	"forceDelete",
 	"withTrashed",
 	"onlyTrashed",
+	"with",
 	"then",
 	"constructor",
 ] satisfies ReservedScopeName[]);
@@ -82,6 +91,31 @@ type Trashed = "without" | "with" | "only";
 interface QueryState {
 	conditions: SQL[];
 	trashed: Trashed;
+	eager: Eager[];
+}
+
+/** What a model lends to another model's `with()`. */
+interface EagerSource {
+	table: Table;
+	tableName: string;
+	columns: Record<string, Column>;
+	/** The model's instances matching `condition` (and its soft-delete filter). */
+	load(condition: SQL, opts: QueryOptions | undefined): Row[] | Promise<Row[]>;
+}
+
+/** Key of a model's {@link EagerSource}. */
+const EAGER = Symbol("bunary.orm.eager");
+
+/** A relation to load, resolved by `with()`. */
+interface Eager {
+	name: string;
+	many: boolean;
+	/** Keys of the relation's columns on this table. */
+	fields: string[];
+	/** The related table's columns they match, and their keys. */
+	references: Column[];
+	referenceKeys: string[];
+	source: EagerSource;
 }
 
 const EVENTS: ModelEvent[] = ["creating", "updating", "saving", "deleting"];
@@ -89,12 +123,33 @@ const EVENTS: ModelEvent[] = ["creating", "updating", "saving", "deleting"];
 interface InstanceState {
 	attributes: Row;
 	original: Row;
+	/** Relations loaded with `with()`. */
+	relations: Row;
 }
 
 const states = new WeakMap<object, InstanceState>();
 
 function stateOf(instance: object): InstanceState {
 	return states.get(instance) as InstanceState;
+}
+
+/** A string key for a tuple of column values; `undefined` if any is null. */
+function tupleKey(values: unknown[]): string | undefined {
+	if (values.some((value) => value == null)) return undefined;
+	return values
+		.map((value) =>
+			value instanceof Date
+				? `date:${value.getTime()}`
+				: `${typeof value}:${String(value)}`,
+		)
+		.join("\u0000");
+}
+
+const keyOfColumn = (columns: Record<string, Column>, column: Column) =>
+	Object.keys(columns).find((key) => columns[key] === column) as string;
+
+function toJson(instance: unknown): unknown {
+	return (instance as { toJSON(): unknown }).toJSON();
 }
 
 function snapshot(row: Row): Row {
@@ -400,9 +455,17 @@ export function defineModel<
 			});
 		},
 		toJSON(this: object): Row {
+			const { attributes, relations } = stateOf(this);
 			const json: Row = {};
-			for (const [key, value] of Object.entries(stateOf(this).attributes)) {
+			for (const [key, value] of Object.entries(attributes)) {
 				if (!hidden.has(key)) json[key] = value;
+			}
+			for (const [key, value] of Object.entries(relations)) {
+				json[key] = Array.isArray(value)
+					? value.map(toJson)
+					: value === null
+						? null
+						: toJson(value);
 			}
 			return json;
 		},
@@ -429,9 +492,13 @@ export function defineModel<
 		return instance;
 	}
 
-	function hydrate(row: Row): Instance {
+	function hydrate(row: Row, relations: Row = {}): Instance {
 		const instance = Object.create(prototype) as object;
-		states.set(instance, { attributes: { ...row }, original: snapshot(row) });
+		states.set(instance, {
+			attributes: { ...row },
+			original: snapshot(row),
+			relations,
+		});
 		for (const key of columnKeys) {
 			Object.defineProperty(instance, key, {
 				enumerable: true,
@@ -441,10 +508,13 @@ export function defineModel<
 				},
 			});
 		}
+		for (const [key, value] of Object.entries(relations)) {
+			Object.defineProperty(instance, key, { enumerable: true, value });
+		}
 		return Object.seal(instance) as Instance;
 	}
 
-	const hydrateAll = (rows: Row[]) => rows.map(hydrate);
+	const hydrateAll = (rows: Row[]) => rows.map((row) => hydrate(row));
 	const selectWhere = (
 		opts: QueryOptions | undefined,
 		condition: SQL | undefined,
@@ -485,13 +555,156 @@ export function defineModel<
 		});
 	}
 
+	/**
+	 * Resolve `with()`'s relation `name` from the Drizzle relations in the
+	 * db's schema, checking that `related` is a model for its table.
+	 */
+	function resolveRelation(name: string, related: unknown): Eager {
+		const { schema, tableNamesMap } = (db as Runner)._ as {
+			schema: TablesRelationalConfig | undefined;
+			tableNamesMap: Record<string, string>;
+		};
+		const tsName = tableNamesMap[getTableUniqueName(table as Table)];
+		const config = schema && tsName ? schema[tsName] : undefined;
+		const relation: Relation | undefined =
+			config && Object.hasOwn(config.relations, name)
+				? config.relations[name]
+				: undefined;
+		if (!schema || !relation) {
+			throw new Error(
+				`defineModel: "${tableName}" has no relation "${name}"; define it with relations() and pass it in drizzle({ schema })`,
+			);
+		}
+		if (RESERVED.has(name) || Object.hasOwn(columns, name)) {
+			throw new Error(
+				`defineModel: relation "${name}" of "${tableName}" has the name of a column or model method; rename it`,
+			);
+		}
+		const target = getTableName(relation.referencedTable);
+		const source = (related as { [EAGER]?: EagerSource } | null)?.[EAGER];
+		if (!source) {
+			throw new Error(
+				`defineModel: relation "${name}" of "${tableName}" needs a model for "${target}"`,
+			);
+		}
+		if (source.table !== relation.referencedTable) {
+			throw new Error(
+				`defineModel: relation "${name}" of "${tableName}" needs a model for "${target}", got one for "${source.tableName}"`,
+			);
+		}
+		const { fields, references } = normalizeRelation(
+			schema,
+			tableNamesMap,
+			relation,
+		);
+		return {
+			name,
+			many: is(relation, Many),
+			fields: fields.map((column) => keyOfColumn(columns, column)),
+			references,
+			referenceKeys: references.map((column) =>
+				keyOfColumn(source.columns, column),
+			),
+			source,
+		};
+	}
+
+	/**
+	 * Load `eager`'s relations for `rows`, one query per relation, and
+	 * return each row's relations (in the order of `rows`).
+	 */
+	function loadRelations(
+		rows: Row[],
+		eager: readonly Eager[],
+		opts: QueryOptions | undefined,
+		index = 0,
+		loaded: Row[] = rows.map(() => ({})),
+	): Row[] | Promise<Row[]> {
+		const relation = eager[index];
+		if (!relation || rows.length === 0) return loaded;
+		const parentKeys = rows.map((row) =>
+			tupleKey(relation.fields.map((key) => row[key])),
+		);
+		const tuples = new Map<string, unknown[]>();
+		rows.forEach((row, i) => {
+			const key = parentKeys[i];
+			if (key !== undefined && !tuples.has(key)) {
+				tuples.set(
+					key,
+					relation.fields.map((field) => row[field]),
+				);
+			}
+		});
+		const assign = (related: Row[]) => {
+			const groups = new Map<string, Row[]>();
+			for (const instance of related) {
+				const key = tupleKey(
+					relation.referenceKeys.map((field) => instance[field]),
+				) as string;
+				groups.set(key, [...(groups.get(key) ?? []), instance]);
+			}
+			parentKeys.forEach((key, i) => {
+				const group = (key === undefined ? undefined : groups.get(key)) ?? [];
+				(loaded[i] as Row)[relation.name] = relation.many
+					? [...group]
+					: (group[0] ?? null);
+			});
+			return loadRelations(rows, eager, opts, index + 1, loaded);
+		};
+		if (tuples.size === 0) return assign([]);
+		const values = [...tuples.values()];
+		const [reference] = relation.references as [Column];
+		const condition =
+			relation.references.length === 1
+				? inArray(
+						reference,
+						values.map(([value]) => value),
+					)
+				: (or(
+						...values.map((tuple) =>
+							and(
+								...relation.references.map((column, i) => eq(column, tuple[i])),
+							),
+						),
+					) as SQL);
+		return then(relation.source.load(condition, opts), assign);
+	}
+
+	/** Hydrate `rows` with the query's eager-loaded relations. */
+	function hydrateLoaded(
+		rows: Row[],
+		eager: readonly Eager[],
+		opts: QueryOptions | undefined,
+	) {
+		return then(loadRelations(rows, eager, opts), (loaded) =>
+			rows.map((row, i) => hydrate(row, loaded[i])),
+		);
+	}
+
 	const queries = new WeakSet<object>();
-	const initial: QueryState = { conditions: [], trashed: "without" };
+	const initial: QueryState = {
+		conditions: [],
+		trashed: "without",
+		eager: [],
+	};
 
 	/** An immutable query: every chained call returns a new one. */
 	function makeQuery(state: QueryState): Query {
 		const next = (change: Partial<QueryState>) =>
 			makeQuery({ ...state, ...change });
+		const select = (opts: QueryOptions | undefined, extra?: SQL) =>
+			selectWhere(
+				opts,
+				filter(
+					extra
+						? { ...state, conditions: [...state.conditions, extra] }
+						: state,
+				),
+			);
+		const findRows = (id: unknown, opts: QueryOptions | undefined) =>
+			then(execute(select(opts, byKey(id)).limit(1)), (rows) =>
+				hydrateLoaded(rows, state.eager, opts),
+			);
 		const query: Record<string, unknown> = {
 			where: (condition: SQL | undefined) =>
 				next({
@@ -499,15 +712,41 @@ export function defineModel<
 						? [...state.conditions, condition]
 						: state.conditions,
 				}),
+			with: (relations: Record<string, unknown>) => {
+				const added = Object.entries(relations).map(([name, related]) =>
+					resolveRelation(name, related),
+				);
+				const names = new Set(added.map((relation) => relation.name));
+				return next({
+					eager: [
+						...state.eager.filter((relation) => !names.has(relation.name)),
+						...added,
+					],
+				});
+			},
 			get: (opts?: QueryOptions) =>
 				settle(opts, () =>
-					then(execute(selectWhere(opts, filter(state))), hydrateAll),
+					then(execute(select(opts)), (rows) =>
+						hydrateLoaded(rows, state.eager, opts),
+					),
 				),
 			first: (opts?: QueryOptions) =>
 				settle(opts, () =>
-					then(execute(selectWhere(opts, filter(state)).limit(1)), (rows) =>
-						rows[0] ? hydrate(rows[0]) : null,
+					then(execute(select(opts).limit(1)), (rows) =>
+						then(
+							hydrateLoaded(rows, state.eager, opts),
+							(list) => list[0] ?? null,
+						),
 					),
+				),
+			find: (id: unknown, opts?: QueryOptions) =>
+				settle(opts, () => then(findRows(id, opts), (list) => list[0] ?? null)),
+			findOrFail: (id: unknown, opts?: QueryOptions) =>
+				settle(opts, () =>
+					then(findRows(id, opts), (list) => {
+						if (!list[0]) throw new ModelNotFoundError(tableName, id);
+						return list[0];
+					}),
 				),
 			update: (values: Row, opts?: QueryOptions) =>
 				updateWhere(values, filter(state), opts),
@@ -544,31 +783,17 @@ export function defineModel<
 		return query as Query;
 	}
 
-	const find = (id: unknown, opts: QueryOptions | undefined) =>
-		execute(
-			selectWhere(opts, filter({ ...initial, conditions: [byKey(id)] })).limit(
-				1,
-			),
-		);
-
 	const model: Record<string, unknown> = {
 		db,
 		table,
 		tableName,
-		find(id: unknown, opts?: QueryOptions) {
-			return settle(opts, () =>
-				then(find(id, opts), (rows) => (rows[0] ? hydrate(rows[0]) : null)),
-			);
-		},
-		findOrFail(id: unknown, opts?: QueryOptions) {
-			return settle(opts, () =>
-				then(find(id, opts), (rows) => {
-					if (!rows[0]) throw new ModelNotFoundError(tableName, id);
-					return hydrate(rows[0]);
-				}),
-			);
-		},
+		find: (id: unknown, opts?: QueryOptions) =>
+			makeQuery(initial).find(id, opts),
+		findOrFail: (id: unknown, opts?: QueryOptions) =>
+			makeQuery(initial).findOrFail(id, opts),
 		where: (condition: SQL | undefined) => makeQuery(initial).where(condition),
+		with: (relations: Record<string, unknown>) =>
+			makeQuery(initial).with(relations as never),
 		create(values: Row, opts?: QueryOptions) {
 			return settle(opts, () => {
 				const input = { ...values };
@@ -613,6 +838,19 @@ export function defineModel<
 			return query[name]?.(...args);
 		};
 	}
+	const eagerSource: EagerSource = {
+		table: table as Table,
+		tableName,
+		columns,
+		load: (condition, opts) =>
+			then(
+				execute(
+					selectWhere(opts, filter({ ...initial, conditions: [condition] })),
+				),
+				hydrateAll,
+			),
+	};
+	Object.defineProperty(model, EAGER, { value: eagerSource });
 	return model as unknown as Model<
 		TTable,
 		TDb,
