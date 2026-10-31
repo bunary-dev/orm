@@ -1,7 +1,7 @@
 {
   "name": "@bunary/orm",
   "version": "0.2.0",
-  "description": "ORM for Bunary - a Bun-first backend framework inspired by Laravel",
+  "description": "Laravel-style models on Drizzle for Bunary - a Bun-first backend framework",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -21,7 +21,7 @@
   ],
   "sideEffects": false,
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun && tsc -p tsconfig.build.json",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --packages external && tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "lint": "biome check ./src ./tests",
@@ -32,9 +32,11 @@
     "bunary",
     "bun",
     "orm",
+    "drizzle",
+    "model",
     "database",
-    "sql",
-    "nosql",
+    "sqlite",
+    "postgres",
     "framework"
   ],
   "author": "Paul Radford",
@@ -54,17 +56,12 @@
     "bun": ">=1.4.0"
   },
   "peerDependencies": {
-    "@bunary/core": "^0.2.0"
-  },
-  "peerDependenciesMeta": {
-    "@bunary/core": {
-      "optional": true
-    }
+    "drizzle-orm": "^0.45.0"
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
-    "@bunary/core": "^0.2.0",
     "@types/bun": "^1.4.2",
+    "drizzle-orm": "^0.45.4",
     "typescript": "^7.0.2"
   }
 }

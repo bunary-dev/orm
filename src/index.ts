@@ -1,86 +1,45 @@
 /**
  * @bunary/orm - ORM for Bunary
  *
- * A Bun-first ORM inspired by Laravel Eloquent with database abstraction layer.
- * Supports SQLite built in; MySQL and PostgreSQL are not implemented
- * (use registerDriver() for other databases).
+ * Laravel-style models on top of Drizzle: define your tables with Drizzle,
+ * wrap them with `defineModel()` and get CRUD with dirty tracking. Supports
+ * SQLite (`drizzle-orm/bun-sqlite`) and Postgres (`drizzle-orm/bun-sql`).
  *
  * @example
  * ```ts
- * import { Model, setOrmConfig } from "@bunary/orm";
+ * import { Database } from "bun:sqlite";
+ * import { eq } from "drizzle-orm";
+ * import { drizzle } from "drizzle-orm/bun-sqlite";
+ * import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+ * import { defineModel } from "@bunary/orm";
  *
- * // Configure the ORM with credentials
- * setOrmConfig({
- *   database: {
- *     type: "sqlite",
- *     sqlite: {
- *       path: "./database.sqlite"
- *     }
- *   }
+ * const users = sqliteTable("users", {
+ *   id: integer().primaryKey({ autoIncrement: true }),
+ *   email: text().notNull(),
  * });
+ * const User = defineModel(drizzle(new Database("app.sqlite")), users);
  *
- * // Query the database through models
- * const user = await Model.table("users").find(1);
- * const users = await Model.table("users").all();
- * const users = await Model.table("users")
- *   .select("id", "name")
- *   .exclude("password")
- *   .all();
+ * const user = await User.create({ email: "ada@example.com" });
+ * user.email = "ada@lovelace.dev";
+ * await user.save();
+ * const found = await User.where(eq(users.email, "ada@lovelace.dev")).first();
  * ```
  */
 
-export { BaseModel } from "./basemodel.js";
-// Configuration
-export {
-	clearOrmConfig,
-	defineOrmConfig,
-	enableCoreConfig,
-	getOrmConfig,
-	setOrmConfig,
-} from "./config.js";
-// Connection Management
-export {
-	clearDriverRegistry,
-	closeDriver,
-	createDriver,
-	type DriverFactory,
-	getDriver,
-	registerDriver,
-	resetDriver,
-} from "./connection.js";
-// Database Drivers
-export { SqliteDriver } from "./drivers/index.js";
+export { ModelNotFoundError } from "./errors.js";
+export { defineModel } from "./model.js";
 export type {
-	DatabaseDriver,
-	QueryResult,
-	RunResult,
-} from "./drivers/types.js";
-export type {
-	MigrationModule,
-	MigrationRecord,
-	MigrationStatus,
-	MigratorOptions,
-} from "./migrations/index.js";
-// Migrations repository
-// Migrator runner
-export {
-	createMigrator,
-	MigrationsRepository,
-	Migrator,
-} from "./migrations/index.js";
-// Model
-export { Model } from "./model.js";
-export type { TableBuilder, TableBuilderCallback } from "./schema/index.js";
-// Schema builder
-export { Schema } from "./schema/index.js";
-
-// Types
-export type {
-	DatabaseConfig,
-	DatabaseType,
-	ModelData,
-	MysqlConfig,
-	OrmConfig,
-	QueryBuilder,
-	SqliteConfig,
+	AnyDatabase,
+	DefineModelOptions,
+	InstanceMethods,
+	Model,
+	ModelInstance,
+	NewRowOf,
+	PrimaryKeyColumn,
+	QueryOptions,
+	RowOf,
+	SelectQuery,
+	TableFor,
+	TransactionFor,
+	WhereQuery,
 } from "./types.js";

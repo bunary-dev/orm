@@ -1,675 +1,430 @@
 # @bunary/orm
 
-ORM for Bunary - a Bun-first backend framework inspired by Laravel Eloquent.
+Laravel-style models for Bunary, built on [Drizzle](https://orm.drizzle.team).
 
-Features a database abstraction layer that supports multiple database types through a unified API.
+You define tables with Drizzle; `defineModel()` wraps a table in a model with
+`find` / `create` / `save` / `delete`, dirty tracking and a typed not-found
+error. Everything else (joins, aggregates, migrations) is plain Drizzle.
+
+Supported dialects:
+
+| Dialect  | Drizzle driver           | Client                |
+| -------- | ------------------------ | --------------------- |
+| SQLite   | `drizzle-orm/bun-sqlite` | `bun:sqlite`          |
+| Postgres | `drizzle-orm/bun-sql`    | `Bun.SQL` (`bun`)     |
 
 ## Installation
 
+`drizzle-orm` is a peer dependency: install it next to the orm.
+
 ```bash
-bun add @bunary/orm
+bun add @bunary/orm drizzle-orm
+bun add -d drizzle-kit # migrations
 ```
 
-## Quick Start
+Requires Bun ≥ 1.4.0.
+
+## Quick start
 
 ```typescript
-import { Model, setOrmConfig } from "@bunary/orm";
+import { Database } from "bun:sqlite";
+import { eq } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { defineModel } from "@bunary/orm";
 
-// Configure the ORM with credentials
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: {
-      path: "./database.sqlite"
-    }
-  }
+// 1. A Drizzle table
+export const users = sqliteTable("users", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  name: text().notNull(),
+  email: text().notNull().unique(),
+  age: integer(),
 });
 
-// Models use the configured database automatically
-const user = await Model.table("users").find(1);
-const users = await Model.table("users").all();
-const usersWithColumns = await Model.table("users")
-  .select("id", "name", "email")
-  .all();
-const usersWithoutPassword = await Model.table("users")
-  .exclude("password")
-  .all();
+// 2. A Drizzle database
+const db = drizzle({ client: new Database("app.sqlite") });
+
+// 3. A model
+export const User = defineModel(db, users);
+
+const user = await User.create({ name: "Ada", email: "ada@example.com" });
+user.id; // assigned by SQLite
+
+user.name = "Ada Lovelace";
+user.isDirty("name"); // true
+await user.save(); // UPDATE "users" SET "name" = ? WHERE "users"."id" = ?
+
+const found = await User.where(eq(users.email, "ada@example.com")).first();
+await found?.delete();
 ```
 
-## Architecture
+## Defining a table and a model
 
-The ORM uses a database abstraction layer:
+### `defineModel(db, table, options?)`
 
-1. **ORM Connection** - Configure credentials and connection settings
-2. **Database Drivers** - Abstraction layer for different database types
-3. **Models** - Use the abstraction to query any database type
+| Argument              | Description                                                                 |
+| --------------------- | --------------------------------------------------------------------------- |
+| `db`                  | A Drizzle database: `drizzle()` from `drizzle-orm/bun-sqlite` or `drizzle-orm/bun-sql` |
+| `table`               | A Drizzle table of the same dialect (`sqliteTable` / `pgTable`)              |
+| `options.primaryKey`  | Primary key column, e.g. `tags.slug`. Defaults to the table's `.primaryKey()` column |
 
-```
-Model → Query Builder → Database Driver → Database
-```
+Row types are inferred from the table: instances have the table's select type
+(`typeof users.$inferSelect`), `create()` takes its insert type
+(`typeof users.$inferInsert`), and `find(id)` takes the primary key's type.
+Using a SQLite table with a Postgres database (or the other way round) is a
+type error.
 
-## Configuration
+`defineModel()` throws when:
 
-The ORM can be configured in two ways:
+- the table has no single `.primaryKey()` column and no `primaryKey` option
+  is given (composite keys are not supported);
+- `primaryKey` is not a column of the table;
+- a column's JS key is one of the instance method names (`isDirty`,
+  `getDirty`, `save`, `delete`, `refresh`, `toJSON`). The SQL column name can
+  be anything: rename the JS key, e.g. `saveFlag: integer("save")`.
 
-### Option 1: Using @bunary/core (Optional)
-
-Configure the ORM alongside your app configuration using `@bunary/core`:
+### Postgres
 
 ```typescript
-import { createConfig, defineConfig } from "@bunary/core";
-import "@bunary/orm"; // or any import from "@bunary/orm" in your project
+import { SQL } from "bun";
+import { drizzle } from "drizzle-orm/bun-sql";
+import { pgTable, serial, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { defineModel } from "@bunary/orm";
 
-// Create a config store
-const configStore = createConfig(
-  defineConfig({
-    app: {
-      name: "MyApp",
-      env: "development",
-    },
-    // Typed as OrmConfig by @bunary/orm
-    orm: {
-      database: {
-        type: "sqlite",
-        sqlite: {
-          path: "./database.sqlite"
-        }
-      }
-    }
-  })
+export const users = pgTable("users", {
+  id: serial().primaryKey(),
+  name: text().notNull(),
+  createdAt: timestamp().notNull().defaultNow(),
+});
+
+export const tokens = pgTable("tokens", {
+  id: uuid().primaryKey().defaultRandom(),
+  label: text().notNull(),
+});
+
+const db = drizzle({ client: new SQL(process.env.DATABASE_URL!) });
+
+export const User = defineModel(db, users);
+export const Token = defineModel(db, tokens);
+```
+
+### Primary keys
+
+The orm never generates key values. The table decides:
+
+| Key                                                     | Assigned by            |
+| ------------------------------------------------------- | ---------------------- |
+| `integer().primaryKey({ autoIncrement: true })` (SQLite) | the database           |
+| `serial().primaryKey()` / identity columns (Postgres)   | the database           |
+| `uuid().primaryKey().defaultRandom()` (Postgres)        | the database           |
+| `text().primaryKey().$defaultFn(() => Bun.randomUUIDv7())` | Drizzle, at insert  |
+| `text().primaryKey()` with no default                   | you, in `create()`     |
+
+`create()` returns the row as persisted (via `RETURNING`), so the key and any
+other database defaults are on the instance. An empty-string key is rejected
+before any query runs; omit the key to use the table's default.
+
+Tables whose key is declared with `primaryKey({ columns: [...] })` need the
+`primaryKey` option:
+
+```typescript
+const tags = sqliteTable(
+  "tags",
+  { slug: text().notNull(), label: text().notNull() },
+  (t) => [primaryKey({ columns: [t.slug] })],
 );
-
-// Make config store available globally for ORM to access
-globalThis.__bunaryCoreConfigStore = configStore;
+const Tag = defineModel(db, tags, { primaryKey: tags.slug });
+await Tag.find("bun");
 ```
 
-The ORM will automatically read its configuration from `@bunary/core` when a config store is available and no explicit config is set.
+## Reading
 
-#### Typed `orm` key
+### `find(id, options?)`
 
-`@bunary/core` does not know about the ORM; `@bunary/orm` adds the `orm` key to `BunaryConfig` through module augmentation shipped in its type declarations:
+The row with that primary key as an instance, or `null`.
 
 ```typescript
-declare module "@bunary/core" {
-  interface BunaryConfig {
-    orm?: OrmConfig;
-  }
-}
+const user = await User.find(1);
 ```
 
-You don't write this yourself: it takes effect as soon as anything in your project imports `@bunary/orm`. `orm` is then typed as `OrmConfig`, so a misspelled or unknown key under `orm` (or an invalid `database.type`) is a type error in `defineConfig()`.
+### `findOrFail(id, options?)`
 
-**Note:** `@bunary/core` is an optional peer dependency (`peerDependenciesMeta.optional`). Install it only if you want to use the integrated configuration approach; without it, `@bunary/orm` installs and typechecks normally and the augmentation is simply ignored.
-
-### Option 2: Using setOrmConfig()
-
-You can also configure the ORM directly using `setOrmConfig()`:
+Like `find()`, but throws `ModelNotFoundError` when there is no row.
 
 ```typescript
-import { setOrmConfig } from "@bunary/orm";
+import { ModelNotFoundError } from "@bunary/orm";
 
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: {
-      path: "./database.sqlite"  // Path to SQLite database file
-    }
-  }
-});
-```
-
-**Note:** `setOrmConfig()` will override any configuration from `@bunary/core`.
-
-### SQLite
-
-```typescript
-// Using @bunary/core
-defineConfig({
-  orm: {
-    database: {
-      type: "sqlite",
-      sqlite: {
-        path: "./database.sqlite"
-      }
-    }
-  }
-});
-
-// Or using setOrmConfig()
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: {
-      path: "./database.sqlite"
-    }
-  }
-});
-```
-
-### MySQL / PostgreSQL (Not Supported)
-
-Only SQLite is built in. `defineOrmConfig()`, `setOrmConfig()`, `getDriver()` and `createDriver()` reject `type: "mysql"` (and `"postgres"`), including configs supplied via `@bunary/core`, with:
-
-```
-Database type "mysql" is not supported. Only SQLite is built in (MySQL and PostgreSQL are not implemented). Register a custom driver using registerDriver() for other types.
-```
-
-To use another database, register your own driver with `registerDriver("mysql", factory)`.
-
-## API
-
-### Eloquent-like Models with `BaseModel`
-
-For an Eloquent-like experience, extend `BaseModel` to create model classes:
-
-```typescript
-import { BaseModel } from "@bunary/orm";
-
-class Users extends BaseModel {
-  protected static tableName = "users";
-  protected static protected = ["password", "secret_key"]; // Auto-excluded fields
-  protected static timestamps = true; // Auto-exclude createdAt, updatedAt
-}
-
-// Use it like Laravel Eloquent:
-const users = await Users.all(); // password and timestamps automatically excluded
-const user = await Users.find(1);
-const user = await Users.where("email", "john@example.com").first();
-const count = await Users.count();
-
-// Create records (UUID auto-generated by default)
-const newUser = await Users.create({
-  name: "John Doe",
-  email: "john@example.com"
-});
-// newUser.id is auto-generated UUID v7
-```
-
-#### BaseModel Features
-
-- **Automatic field exclusion**: Define `protected static protected = ["password"]` to automatically exclude sensitive fields
-- **Timestamp management**: Set `protected static timestamps = true` to exclude `createdAt` and `updatedAt`, or provide a custom array
-- **UUID-first primary keys**: Defaults to UUID v7 primary keys (using `Bun.randomUUIDv7()`)
-- **All query builder methods**: Available as static methods on your model class
-
-#### BaseModel Configuration
-
-```typescript
-class Users extends BaseModel {
-  // Required: Table name
-  protected static tableName = "users";
-  
-  // Optional: Fields to automatically exclude from all queries
-  protected static protected = ["password", "secret_key"];
-  
-  // Optional: Timestamp fields to exclude
-  // - true: Exclude createdAt, updatedAt (default)
-  // - false: Don't exclude timestamps
-  // - ["createdAt"]: Exclude only createdAt
-  protected static timestamps = true;
-  
-  // Optional: Primary key type (defaults to "uuid")
-  // - "uuid": Use UUID v7 primary keys (auto-generated with Bun.randomUUIDv7())
-  // - "integer": Use integer primary keys
-  protected static primaryKeyType: "uuid" | "integer" = "uuid";
-  
-  // Optional: Primary key column name (defaults to "id")
-  protected static primaryKeyName = "id";
-}
-```
-
-### `Model.table(tableName)`
-
-Start a query for a specific table. Returns a `QueryBuilder` instance.
-
-```typescript
-const query = Model.table("users");
-```
-
-### Query Builder Methods
-
-#### `find(id: string | number)`
-
-Find a record by its ID.
-
-```typescript
-const user = await Model.table("users").find(1);
-// Returns: { id: 1, name: "John", email: "john@example.com", ... } or null
-```
-
-#### `all()`
-
-Get all records from the table.
-
-```typescript
-const users = await Model.table("users").all();
-// Returns: [{ id: 1, name: "John", ... }, { id: 2, name: "Jane", ... }, ...]
-```
-
-#### `select(...columns: string[])`
-
-Select specific columns from the results.
-
-```typescript
-const users = await Model.table("users")
-  .select("id", "name", "email")
-  .all();
-// Returns only id, name, and email columns
-```
-
-#### `exclude(...columns: string[])`
-
-Exclude specific columns from the results.
-
-```typescript
-const users = await Model.table("users")
-  .exclude("password", "secret_key")
-  .all();
-// Returns all columns except password and secret_key
-```
-
-#### `where(column: string, operatorOrValue: string | number | boolean | null, value?: string | number | boolean | null)`
-
-Add a where condition to filter results.
-
-```typescript
-// Simple equality (default operator is '=')
-const users = await Model.table("users")
-  .where("age", 25)
-  .all();
-
-// With explicit operator
-const users = await Model.table("users")
-  .where("age", ">", 18)
-  .all();
-
-// NULL handling: generates IS NULL / IS NOT NULL
-await Model.table("users").where("deleted_at", null).all();
-await Model.table("users").where("deleted_at", "=", null).all();
-await Model.table("users").where("deleted_at", "!=", null).all();
-```
-
-Passing `undefined` as the value throws an error (e.g. `where("age", ">", undefined)`),
-and operators other than `=`, `!=` and `<>` cannot be combined with `null`.
-`count()` honours the same conditions.
-
-#### `limit(count: number)`
-
-Limit the number of results returned.
-
-```typescript
-const users = await Model.table("users")
-  .limit(10)
-  .all();
-```
-
-#### `offset(count: number)`
-
-Skip a number of records (useful for pagination).
-
-```typescript
-const users = await Model.table("users")
-  .limit(10)
-  .offset(20) // Skip first 20 records
-  .all();
-```
-
-#### `orderBy(column: string, direction?: "asc" | "desc")`
-
-Order results by a column.
-
-```typescript
-const users = await Model.table("users")
-  .orderBy("name", "asc")
-  .all();
-
-// Default direction is 'asc'
-const users = await Model.table("users")
-  .orderBy("created_at")
-  .all();
-```
-
-#### `first()`
-
-Get the first record matching the query.
-
-```typescript
-const user = await Model.table("users")
-  .where("email", "john@example.com")
-  .first();
-// Returns: { id: 1, name: "John", ... } or null
-```
-
-#### `count()`
-
-Count the number of records matching the query.
-
-```typescript
-const total = await Model.table("users").count();
-const activeUsers = await Model.table("users")
-  .where("active", true)
-  .count();
-```
-
-### Method Chaining
-
-All query builder methods are chainable:
-
-```typescript
-// Chain select with find
-const user = await Model.table("users")
-  .select("id", "name")
-  .find(1);
-
-// Chain exclude with all
-const users = await Model.table("users")
-  .exclude("password")
-  .all();
-
-// When both select() and exclude() are used, select() takes precedence
-const users = await Model.table("users")
-  .select("id", "name")
-  .exclude("password")  // This is ignored since select() is used
-  .all();
-```
-
-## Database Drivers
-
-The ORM uses a driver abstraction layer, making it easy to add new database types.
-
-### SQLite (MVP)
-
-SQLite is fully supported and uses Bun's native `bun:sqlite` module.
-
-### MySQL and PostgreSQL
-
-Not implemented. Use `registerDriver()` to supply a driver.
-
-### Custom Drivers (Third-Party Registry)
-
-Third-party packages can register custom database drivers using the driver registry API:
-
-```typescript
-import { registerDriver, createDriver, type DriverFactory } from "@bunary/orm";
-import type { DatabaseConfig, DatabaseDriver } from "@bunary/orm";
-
-// Define your custom driver
-class PostgresDriver implements DatabaseDriver {
-  // ... implement DatabaseDriver interface
-}
-
-// Register the driver factory
-const factory: DriverFactory = (config: DatabaseConfig) => {
-  return new PostgresDriver(config.postgres!);
-};
-
-registerDriver("postgres", factory);
-
-// Now you can use it in your config
-setOrmConfig({
-  database: {
-    type: "postgres",
-    postgres: {
-      // your postgres config
-    }
-  }
-});
-```
-
-**Note:** Registered drivers take precedence over built-in drivers, allowing you to override default implementations if needed.
-
-### Transactions
-
-The ORM supports database transactions for atomic operations:
-
-```typescript
-import { getDriver } from "@bunary/orm";
-
-const driver = getDriver();
-
-// Execute operations in a transaction
-await driver.transaction(async (tx) => {
-  tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
-  tx.exec("INSERT INTO users (name) VALUES (?)", "Bob");
-  // If any operation fails, all changes are rolled back
-});
-
-// Transactions automatically commit on success or rollback on error
 try {
-  await driver.transaction(async (tx) => {
-    tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
-    throw new Error("Something went wrong");
-    // This will automatically rollback
-  });
+  const user = await User.findOrFail(id);
 } catch (error) {
-  // Transaction was rolled back
-}
-
-// Nested transactions use savepoints
-await driver.transaction(async (tx) => {
-  tx.exec("INSERT INTO users (name) VALUES (?)", "Alice");
-  
-  await tx.transaction(async (tx2) => {
-    tx2.exec("INSERT INTO users (name) VALUES (?)", "Bob");
-    // Nested transaction (savepoint)
-  });
-  
-  // Both commits if successful, or both rollback on error
-});
-```
-
-### Schema Builder (Migrations)
-
-The ORM provides a schema builder for creating and altering tables (SQLite):
-
-```typescript
-import { Schema, setOrmConfig } from "@bunary/orm";
-
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: { path: "./database.sqlite" }
+  if (error instanceof ModelNotFoundError) {
+    error.table; // "users"
+    error.id; // the id you passed
   }
-});
-
-// Create a table with UUID primary key
-Schema.createTable("users", (table) => {
-  table.uuid("id").primary(); // UUID primary key (defaults to "id")
-  table.string("name", 255).notNull();
-  table.string("email", 255).unique().notNull();
-  table.boolean("active").default(true);
-  table.timestamp("deleted_at").nullable();
-  table.timestamps();
-});
-
-// Or use integer primary key
-Schema.createTable("posts", (table) => {
-  table.increments("id"); // Integer primary key
-  table.text("title").notNull();
-});
-
-// Check if table/column exists
-if (!Schema.hasTable("users")) {
-  Schema.createTable("users", (table) => { /* ... */ });
-}
-if (!Schema.hasColumn("users", "phone")) {
-  Schema.table("users", (table) => {
-    table.string("phone", 20).nullable();
-  });
-}
-
-// Rename a table
-Schema.renameTable("users", "accounts");
-
-// Drop a table
-Schema.dropTable("users");
-```
-
-**Schema methods:** `createTable(name, callback)`, `dropTable(name)`, `table(name, callback)` (alter), `hasTable(name)`, `hasColumn(table, column)`, `renameTable(oldName, newName)`.
-
-**Column types:** `increments("id")`, `integer("col")`, `text("col")`, `string("col", length?)`, `boolean("col")`, `timestamp("col")`, `uuid("id"?)`, `foreignId("col")`, `timestamps()`.
-
-**Column modifiers:** `.nullable()`, `.notNull()`, `.default(value)`, `.unique()`, `.primary()`.
-
-**Constraints:** `unique(["a", "b"])`, `index(["a", "b"])`, `foreign("col").references("table", "column")`, `foreignId("col").references("table", "column")`.
-
-### Migrations Repository
-
-Track which migrations have been applied using `MigrationsRepository`. It ensures a `migrations` table exists, records applied migrations by name and batch, and supports listing and rollback.
-
-```typescript
-import { MigrationsRepository, setOrmConfig } from "@bunary/orm";
-
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: { path: "./database.sqlite" }
-  }
-});
-
-const repo = new MigrationsRepository();
-repo.ensureTable(); // Create migrations table if missing (idempotent)
-
-// Run a migration, then log it
-// ... execute migration SQL ...
-repo.log("20260101000000_create_users", repo.getNextBatchNumber());
-
-// List applied migrations (ordered by id)
-const applied = repo.listApplied();
-
-// Rollback: delete one migration record or a whole batch
-repo.deleteLog("20260101000000_create_users");
-repo.deleteBatch(2); // Remove all migrations in batch 2
-```
-
-**API:** `ensureTable()`, `log(name, batch)`, `listApplied()`, `getNextBatchNumber()`, `getLastBatch()`, `deleteLog(name)`, `deleteBatch(batch)`.
-
-### Migrator Runner
-
-Run and rollback migrations using the `createMigrator()` API. Discovers migration files, runs pending migrations in order, and supports rollback. Uses transactions for safety.
-
-```typescript
-import { createMigrator, setOrmConfig } from "@bunary/orm";
-
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: { path: "./database.sqlite" }
-  }
-});
-
-const migrator = createMigrator({ migrationsPath: "./database/migrations" });
-
-// Check status
-const status = await migrator.status();
-console.log("Ran:", status.ran);
-console.log("Pending:", status.pending);
-
-// Run all pending migrations
-await migrator.up();
-
-// Rollback last batch
-await migrator.down();
-
-// Rollback multiple batches
-await migrator.down({ steps: 2 });
-```
-
-**Migration file format:** Each migration file must export `up()` and `down()` functions. Use the Schema Builder for type-safe table definitions:
-
-```typescript
-// database/migrations/20260101000000_create_users.ts
-import { Schema } from "@bunary/orm";
-
-export async function up() {
-  Schema.createTable("users", (table) => {
-    table.uuid("id").primary();
-    table.string("name", 255).notNull();
-    table.string("email", 255).unique().notNull();
-    table.boolean("active").default(true);
-    table.timestamps();
-  });
-
-  Schema.createTable("posts", (table) => {
-    table.uuid("id").primary();
-    table.foreignId("user_id").references("users", "id");
-    table.string("title", 255).notNull();
-    table.text("content").nullable();
-    table.timestamps();
-  });
-}
-
-export async function down() {
-  Schema.dropTable("posts");
-  Schema.dropTable("users");
+  throw error;
 }
 ```
 
-**Complete migration workflow example:**
+### `where(condition).get(options?)` / `.first(options?)`
+
+`condition` is any Drizzle condition (`eq`, `and`, `or`, `gt`, `like`,
+`inArray`, `isNull`, `` sql`...` ``, …). `get()` returns every matching row,
+`first()` the first one or `null`.
 
 ```typescript
-import { createMigrator, Schema, setOrmConfig } from "@bunary/orm";
+import { and, gt, isNull } from "drizzle-orm";
 
-setOrmConfig({
-  database: {
-    type: "sqlite",
-    sqlite: { path: "./database.sqlite" }
-  }
+const adults = await User.where(gt(users.age, 17)).get();
+const unnamed = await User.where(and(isNull(users.age), eq(users.name, ""))).first();
+```
+
+For ordering, limits, joins or aggregates use [`query()`](#raw-drizzle-query-and-hydrate).
+
+## Creating
+
+### `create(values, options?)`
+
+Inserts a row and returns it as a clean instance, including database-assigned
+values. `values` is copied, never mutated.
+
+```typescript
+const token = await Token.create({ label: "ci" });
+token.id; // uuid from defaultRandom()
+```
+
+## Instances
+
+### Attributes
+
+Columns are enumerable properties, readable and writable:
+
+```typescript
+const user = await User.findOrFail(1);
+user.name; // "Ada"
+user.name = "Ada Lovelace";
+
+const { id, name } = user; // destructuring works
+JSON.stringify(user); // {"id":1,"name":"Ada Lovelace",...}
+user.toJSON(); // plain object copy
+```
+
+Instances are sealed: assigning a property that is not a column throws a
+`TypeError`, so typos fail loudly.
+
+### Dirty tracking
+
+| Method          | Returns                                                         |
+| --------------- | --------------------------------------------------------------- |
+| `isDirty()`     | whether any column differs from the persisted value             |
+| `isDirty(key)`  | whether that column differs                                     |
+| `getDirty()`    | an object with only the changed columns and their new values    |
+
+Values are compared by content: `Date`s by time, JSON values and binary data
+deeply. Changing a JSON value in place (`user.meta.tags.push("x")`) marks it
+dirty; setting a column back to its persisted value makes it clean again.
+
+```typescript
+user.isDirty(); // false
+user.email = "ada@lovelace.dev";
+user.getDirty(); // { email: "ada@lovelace.dev" }
+```
+
+### `save(options?)`
+
+Writes **only the dirty columns** (`UPDATE … SET <dirty columns> WHERE <pk> =
+<persisted pk>`), then reloads the instance from the `RETURNING` row, so
+`$onUpdate` values and triggers are reflected. With nothing dirty, `save()`
+runs no query. Changing the primary key and saving updates the key. Throws
+`ModelNotFoundError` when the row no longer exists. Returns the instance.
+
+Because only dirty columns are written, two instances of the same row that
+change different columns do not overwrite each other.
+
+### `delete(options?)`
+
+Deletes the row, matched by its persisted primary key.
+
+### `refresh(options?)`
+
+Reloads every column from the database and discards unsaved changes. Throws
+`ModelNotFoundError` when the row no longer exists. Returns the instance.
+
+## Transactions
+
+`create()`, `save()`, `delete()` and every read (`find`, `findOrFail`,
+`where().get/first`, `refresh`, `query`) accept `{ tx }`: a Drizzle
+transaction (or database) of the same dialect, used instead of the model's
+`db`.
+
+### Postgres
+
+Drizzle transactions are async: await the model calls inside the callback.
+Any error rolls the transaction back.
+
+```typescript
+await db.transaction(async (tx) => {
+  const order = await Order.create({ userId: user.id, total: 100 }, { tx });
+  user.balance -= 100;
+  await user.save({ tx });
 });
-
-// Create migrator instance
-const migrator = createMigrator({ migrationsPath: "./database/migrations" });
-
-// Check migration status
-const status = await migrator.status();
-console.log(`Ran: ${status.ran.length}, Pending: ${status.pending.length}`);
-
-// Run all pending migrations
-await migrator.up();
-
-// Rollback last batch if needed
-await migrator.down();
 ```
 
-**API:** `createMigrator(options?)`, `migrator.status()`, `migrator.up()`, `migrator.down({ steps? })`. Migrations run in transactions - if any migration fails, all changes are rolled back.
+### SQLite (bun:sqlite)
 
-## Advanced Usage
-
-### Direct Driver Access
-
-For advanced use cases, you can access the driver directly:
+bun:sqlite transactions are **synchronous**: the callback must not be
+`async` and must not `await`, or the work after the first `await` runs after
+the transaction has committed. The orm issues each query synchronously when
+you call a method, so calls made inside the callback are part of the
+transaction; their promises are already settled and can be awaited after it:
 
 ```typescript
-import { getDriver } from "@bunary/orm";
+import type { ModelInstance } from "@bunary/orm";
 
-const driver = getDriver();
-const result = driver.query("SELECT * FROM users WHERE id = ?", 1);
-const user = result.get();
+let created!: Promise<ModelInstance<typeof orders>>;
+db.transaction((tx) => {
+  created = Order.create({ userId: user.id, total: 100 }, { tx });
+  user.balance -= 100;
+  user.save({ tx });
+});
+const order = await created;
 ```
 
-### Driver Connection Management
+With `{ tx }`, errors (a failed query, a missing row, an empty-string key) are
+**thrown synchronously** instead of returned as a rejected promise, so the
+transaction callback sees them and Drizzle rolls back. `tx.rollback()` works
+as usual. Without `{ tx }`, errors are always rejected promises.
 
-The ORM caches driver instances for connection reuse. `getDriver()` returns the same driver instance when called multiple times with the same configuration, reducing connection overhead.
+If you need a value from one statement to build the next inside a SQLite
+transaction, use Drizzle's sync API there and `hydrate()` the result:
 
 ```typescript
-import { getDriver, closeDriver, resetDriver } from "@bunary/orm";
-
-// Get driver (cached after first call)
-const driver1 = getDriver();
-const driver2 = getDriver(); // Returns same instance as driver1
-
-// Explicitly close the cached driver
-closeDriver(); // Closes connection and clears cache
-
-// Reset cache without closing (useful for testing)
-resetDriver(); // Clears cache, next getDriver() creates new instance
+db.transaction((tx) => {
+  const row = tx.insert(orders).values({ userId: user.id }).returning().get();
+  const order = Order.hydrate(row);
+  // ...
+});
 ```
 
-**Note:** The driver cache is automatically invalidated when the configuration changes, ensuring you always get a driver matching the current config.
+Instances are in-memory objects: when a transaction rolls back, instances
+saved inside it keep their new values; call `refresh()` to reload them.
 
-## Requirements
+## Raw Drizzle: `query()` and `hydrate()`
 
-- Bun ≥ 1.4.0
+`query(options?)` is `db.select().from(table)`, fully typed, for anything the
+model API does not cover. It returns plain rows.
+
+```typescript
+import { desc, gt } from "drizzle-orm";
+
+const rows = await User.query()
+  .where(gt(users.age, 17))
+  .orderBy(desc(users.age))
+  .limit(10);
+```
+
+`hydrate(row)` wraps a row you selected yourself in a clean instance:
+
+```typescript
+const users = rows.map(User.hydrate);
+```
+
+The model also exposes `db`, `table` and `tableName`. For joins, aggregates,
+upserts or bulk writes, use `User.db` and Drizzle directly.
+
+## Migrations (drizzle-kit)
+
+The orm has no migrator: schema changes are Drizzle tables plus
+[drizzle-kit](https://orm.drizzle.team/docs/kit-overview).
+
+```typescript
+// drizzle.config.ts
+import { defineConfig } from "drizzle-kit";
+
+export default defineConfig({
+  dialect: "sqlite", // or "postgresql"
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  dbCredentials: { url: "./app.sqlite" }, // or process.env.DATABASE_URL
+});
+```
+
+```bash
+bunx drizzle-kit generate # write SQL migrations from your tables
+bunx drizzle-kit migrate  # apply them
+```
+
+To apply migrations from code at startup:
+
+```typescript
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+
+migrate(db, { migrationsFolder: "./drizzle" });
+
+// Postgres: import from "drizzle-orm/bun-sql/migrator" and `await migrate(...)`
+```
+
+## SQL safety
+
+The orm never builds SQL strings. Every query goes through Drizzle's query
+builder: table and column names are quoted as identifiers by Drizzle and
+values are bound as parameters. Conditions are Drizzle expressions; inside
+`` sql`...` `` templates, interpolated values are parameters too (use
+`sql.identifier()` for dynamic identifiers, never `sql.raw()` with input).
+
+## Errors
+
+| Error                | Thrown by                                     | Properties    |
+| -------------------- | --------------------------------------------- | ------------- |
+| `ModelNotFoundError` | `findOrFail()`, `save()` and `refresh()` on a deleted row | `table`, `id` |
+| `Error`              | `defineModel()` (invalid definition), `create()` (empty-string key) | |
+
+Database errors (constraint violations, …) are passed through from the driver.
+
+## Types
+
+| Export                         | Description                                          |
+| ------------------------------ | ---------------------------------------------------- |
+| `Model<TTable, TDb, TId>`      | What `defineModel()` returns                         |
+| `ModelInstance<TTable, TDb>`   | A row plus the instance methods                      |
+| `RowOf<TTable>` / `NewRowOf<TTable>` | Select / insert types of a table               |
+| `QueryOptions<TDb>`            | `{ tx? }`                                            |
+| `DefineModelOptions`           | `{ primaryKey? }`                                    |
+| `WhereQuery`                   | What `where()` returns                               |
+| `SelectQuery<TDb, TTable>`     | What `query()` returns                               |
+| `AnyDatabase`, `TableFor`, `TransactionFor`, `PrimaryKeyColumn`, `InstanceMethods` | Helpers used by the above |
+
+```typescript
+import type { ModelInstance } from "@bunary/orm";
+
+type UserRecord = ModelInstance<typeof users>;
+```
+
+## Upgrading from 0.2.x
+
+This version replaces the hand-rolled query builder, schema builder, migrator and
+drivers with Drizzle. There are no compatibility shims.
+
+| 0.2                                              | Now                                                    |
+| ------------------------------------------------ | ------------------------------------------------------ |
+| `setOrmConfig()`, `defineOrmConfig()`, `orm` key in `@bunary/core` config | create a Drizzle `db` and pass it to `defineModel()` |
+| `Model.table("users").find(1)`                   | `defineModel(db, users).find(1)`                       |
+| `class Users extends BaseModel`                  | `const User = defineModel(db, users)`                  |
+| `.where("age", ">", 18).all()`                   | `.where(gt(users.age, 18)).get()`                      |
+| `.select()`, `.exclude()`, `.orderBy()`, `.limit()`, `.offset()`, `.count()` | `query()` and Drizzle (`db.$count(users)` for counts) |
+| `BaseModel.create()` generating UUID v7 keys     | `$defaultFn(() => Bun.randomUUIDv7())` on the column   |
+| `protected` / `timestamps` exclusion             | select the columns you want with `User.db.select({...})` |
+| `Schema.create()`, `Migrator`, `MigrationsRepository` | Drizzle tables + drizzle-kit                      |
+| `SqliteDriver`, `registerDriver()`, `getDriver().transaction()` | Drizzle drivers and `db.transaction()` |
+
+## Testing
+
+`bun test` always runs the SQLite tests. The Postgres tests run when
+`TEST_POSTGRES_URL` points at a database they may create and drop
+`orm_test_*` tables in, and are skipped otherwise:
+
+```bash
+TEST_POSTGRES_URL=postgres://postgres:postgres@localhost:5432/postgres bun test
+```
 
 ## License
 
