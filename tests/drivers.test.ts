@@ -5,14 +5,18 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { SqliteDriver } from "../src/drivers/sqlite-driver.js";
 import type { DatabaseDriver } from "../src/drivers/types.js";
+import { createTempFiles } from "./helpers/temp-files.js";
 
 describe("Database Drivers", () => {
+	const temp = createTempFiles();
+	afterAll(() => temp.cleanup());
+
 	describe("SqliteDriver", () => {
 		let testDbPath: string;
 		let driver: SqliteDriver;
 
 		beforeAll(() => {
-			testDbPath = `/tmp/bunary-driver-test-${Date.now()}.sqlite`;
+			testDbPath = temp.sqlitePath("bunary-driver-test");
 			driver = new SqliteDriver(testDbPath);
 
 			// Create test table
@@ -31,11 +35,6 @@ describe("Database Drivers", () => {
 
 		afterAll(() => {
 			driver.close();
-			try {
-				Bun.file(testDbPath).unlink();
-			} catch {
-				// Ignore cleanup errors
-			}
 		});
 
 		it("should execute queries and return all results", () => {
@@ -91,7 +90,7 @@ describe("Database Drivers", () => {
 
 		it("should close the connection", () => {
 			const newDriver = new SqliteDriver(
-				`/tmp/bunary-driver-close-test-${Date.now()}.sqlite`,
+				temp.sqlitePath("bunary-driver-close-test"),
 			);
 			expect(() => newDriver.close()).not.toThrow();
 		});
@@ -99,7 +98,7 @@ describe("Database Drivers", () => {
 
 	describe("DatabaseDriver Interface", () => {
 		it("should implement the DatabaseDriver interface", () => {
-			const testDbPath = `/tmp/bunary-interface-test-${Date.now()}.sqlite`;
+			const testDbPath = temp.sqlitePath("bunary-interface-test");
 			const driver: DatabaseDriver = new SqliteDriver(testDbPath);
 
 			expect(typeof driver.query).toBe("function");
@@ -107,11 +106,6 @@ describe("Database Drivers", () => {
 			expect(typeof driver.close).toBe("function");
 
 			driver.close();
-			try {
-				Bun.file(testDbPath).unlink();
-			} catch {
-				// Ignore
-			}
 		});
 	});
 });

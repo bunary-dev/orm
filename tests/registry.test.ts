@@ -1,7 +1,7 @@
 /**
  * Driver Registry Tests
  */
-import { beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import {
 	clearDriverRegistry,
 	createDriver,
@@ -9,12 +9,16 @@ import {
 } from "../src/connection.js";
 import type { DatabaseDriver } from "../src/drivers/types.js";
 import type { DatabaseConfig } from "../src/types.js";
+import { createTempFiles } from "./helpers/temp-files.js";
 
 describe("Driver Registry", () => {
 	beforeEach(() => {
 		// Clear registry before each test
 		clearDriverRegistry();
 	});
+
+	const temp = createTempFiles();
+	afterEach(() => temp.cleanup());
 
 	describe("registerDriver()", () => {
 		it("should register a custom driver factory", () => {
@@ -63,7 +67,7 @@ describe("Driver Registry", () => {
 			const config: DatabaseConfig = {
 				type: "sqlite",
 				sqlite: {
-					path: "/tmp/test.sqlite",
+					path: temp.sqlitePath("bunary-test"),
 				},
 			};
 
@@ -108,7 +112,7 @@ describe("Driver Registry", () => {
 			const config: DatabaseConfig = {
 				type: "sqlite",
 				sqlite: {
-					path: "/tmp/test-fallback.sqlite",
+					path: temp.sqlitePath("bunary-test-fallback"),
 				},
 			};
 

@@ -9,16 +9,17 @@ import {
 	setOrmConfig,
 } from "../src/index.js";
 import { createMigrator } from "../src/migrations/migrator.js";
+import { createTempFiles } from "./helpers/temp-files.js";
 
 describe("Migrator", () => {
 	let testDbPath: string;
 	let migrationsPath: string;
+	const temp = createTempFiles();
 
 	beforeEach(async () => {
 		// Use unique paths for each test
-		const timestamp = Date.now();
-		testDbPath = `/tmp/test-migrator-${timestamp}.sqlite`;
-		migrationsPath = `/tmp/test-migrations-${timestamp}`;
+		testDbPath = temp.sqlitePath("bunary-test-migrator");
+		migrationsPath = temp.dirPath("bunary-test-migrations");
 
 		setOrmConfig({
 			database: {
@@ -42,37 +43,9 @@ describe("Migrator", () => {
 		await Bun.write(`${migrationsPath}/${name}.ts`, finalContent);
 	};
 
-	afterEach(async () => {
+	afterEach(() => {
 		resetDriver();
-		try {
-			if (testDbPath) {
-				await Bun.file(testDbPath).unlink();
-			}
-		} catch {
-			// ignore
-		}
-		try {
-			if (migrationsPath) {
-				// Clean up migration files
-				const glob = new Bun.Glob("**/*.ts");
-				for await (const file of glob.scan(migrationsPath)) {
-					try {
-						const fullPath = `${migrationsPath}/${file}`;
-						await Bun.file(fullPath).unlink();
-					} catch {
-						// ignore
-					}
-				}
-				// Remove .gitkeep
-				try {
-					await Bun.file(`${migrationsPath}/.gitkeep`).unlink();
-				} catch {
-					// ignore
-				}
-			}
-		} catch {
-			// ignore
-		}
+		temp.cleanup();
 	});
 
 	describe("createMigrator()", () => {
