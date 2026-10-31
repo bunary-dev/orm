@@ -125,6 +125,73 @@ async function typeChecks() {
 	});
 	defineModel(db, renamed);
 
+	// Soft deletes need a nullable Date `deletedAt` column.
+	const notes = sqliteTable("notes", {
+		id: integer("id").primaryKey(),
+		title: text("title").notNull(),
+		active: integer("active", { mode: "boolean" }).notNull(),
+		deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+	});
+	const textDeletedAt = sqliteTable("text_deleted_at", {
+		id: integer("id").primaryKey(),
+		deletedAt: text("deleted_at"),
+	});
+	// @ts-expect-error softDeletes requires a deletedAt column
+	defineModel(db, users, { softDeletes: true });
+	// @ts-expect-error deletedAt must be a nullable Date column
+	defineModel(db, textDeletedAt, { softDeletes: true });
+	defineModel(db, users, { softDeletes: false });
+	const Note = defineModel(db, notes, { softDeletes: true });
+	const note = await Note.findOrFail(1);
+	const isTrashed: boolean = note.trashed();
+	const restored: typeof note | false = await note.restore();
+	const forced: boolean = await note.forceDelete();
+	const withTrashed: (typeof note)[] = await Note.withTrashed().get();
+	await Note.where(undefined).onlyTrashed().first();
+	const restoredCount: number = await Note.onlyTrashed().restore();
+	const forcedCount: number = await Note.where(undefined).forceDelete();
+	Note.on("deleting", (n) => n.trashed());
+	// @ts-expect-error no soft deletes on this model
+	user.trashed();
+	// @ts-expect-error no soft deletes on this model
+	await user.restore();
+	// @ts-expect-error no soft deletes on this model
+	await user.forceDelete();
+	// @ts-expect-error no soft deletes on this model
+	User.withTrashed();
+	// @ts-expect-error no soft deletes on this model
+	User.where(undefined).onlyTrashed();
+
+	// Scopes: names and arguments are inferred.
+	const Scoped = defineModel(db, notes, {
+		softDeletes: true,
+		scopes: {
+			active: (q) => q.where(undefined).withTrashed(),
+			titled: (q, _title: string) => q.where(undefined),
+		},
+	});
+	const scoped: (typeof note)[] = await Scoped.active().get();
+	await Scoped.active().where(undefined).titled("x").first();
+	await Scoped.where(undefined).active().onlyTrashed().titled("x").get();
+	// @ts-expect-error unknown scope
+	Scoped.inactive();
+	// @ts-expect-error unknown scope
+	Scoped.active().inactive();
+	// @ts-expect-error title is a string
+	Scoped.titled(1);
+	// @ts-expect-error title is required
+	Scoped.titled();
+	// @ts-expect-error a scope must return the query
+	defineModel(db, notes, { scopes: { bad: () => 1 } });
+	// @ts-expect-error scope name "where" is reserved
+	defineModel(db, notes, { scopes: { where: (q) => q } });
+	const PlainScoped = defineModel(db, users, {
+		scopes: { named: (q) => q },
+	});
+	await PlainScoped.named().get();
+	// @ts-expect-error no soft deletes on this model
+	PlainScoped.named().withTrashed();
+
 	return [
 		id,
 		name,
@@ -140,6 +207,13 @@ async function typeChecks() {
 		deletedCount,
 		nick,
 		jsonName,
+		isTrashed,
+		restored,
+		forced,
+		withTrashed,
+		restoredCount,
+		forcedCount,
+		scoped,
 	];
 }
 

@@ -14,6 +14,7 @@ import {
 import { defineModel, ModelNotFoundError } from "../src/index.js";
 import {
 	describeModelSuite,
+	notesShape,
 	postsShape,
 	usersShape,
 } from "./helpers/model-suite.js";
@@ -32,6 +33,12 @@ const SCHEMA = `
 		created_at INTEGER NOT NULL
 	);
 	CREATE TABLE posts (id TEXT PRIMARY KEY, title TEXT NOT NULL);
+	CREATE TABLE notes (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		title TEXT NOT NULL,
+		active INTEGER NOT NULL DEFAULT 1,
+		deleted_at INTEGER
+	);
 `;
 
 function open() {
@@ -53,6 +60,8 @@ describeModelSuite("sqlite", () => {
 		defineUsers: (options) => defineModel(db, usersShape, options),
 		users: usersShape,
 		posts: postsShape,
+		notes: notesShape,
+		db,
 		queries,
 		postIdPattern: UUID_V7,
 		async reset() {
@@ -280,6 +289,30 @@ describe("defineModel (definition)", () => {
 		// @ts-expect-error column "save" is reserved
 		expect(() => defineModel(db, clash)).toThrow(/column "save".*reserved/);
 		for (const key of ["delete", "toJSON", "isDirty", "getDirty", "refresh"]) {
+			const table = sqliteTable("clash", {
+				id: integer("id").primaryKey(),
+				[key]: text("x"),
+			});
+			expect(() => defineModel(db, table as never)).toThrow(
+				new RegExp(`column "${key}" of "clash" is reserved`),
+			);
+		}
+	});
+
+	it("throws when softDeletes is set but there is no deletedAt column", () => {
+		expect(() =>
+			defineModel(db, usersShape, { softDeletes: true as never }),
+		).toThrow(/softDeletes requires a "deletedAt" column on "users"/);
+	});
+
+	it("throws when a scope is not a function", () => {
+		expect(() =>
+			defineModel(db, usersShape, { scopes: { broken: 1 } as never }),
+		).toThrow(/scope "broken" of "users" is not a function/);
+	});
+
+	it("reserves the soft-delete method names as column keys", () => {
+		for (const key of ["restore", "trashed", "forceDelete"]) {
 			const table = sqliteTable("clash", {
 				id: integer("id").primaryKey(),
 				[key]: text("x"),

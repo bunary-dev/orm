@@ -2,15 +2,17 @@
  * Dialect-independent defineModel behaviour, run once per dialect.
  *
  * Each dialect test file defines a `users` table (integer key assigned by the
- * database) and a `posts` table (string key assigned by a table default) with
- * the same JS keys, and hands them to `describeModelSuite`.
+ * database), a `posts` table (string key assigned by a table default) and a
+ * `notes` table (soft deletes) with the same JS keys, and hands them to
+ * `describeModelSuite`.
  */
 import { beforeEach, describe, expect, it } from "bun:test";
-import { and, eq, gt, isNull } from "drizzle-orm";
+import { and, eq, gt, isNull, like } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import {
 	type DefineModelOptions,
+	defineModel,
 	type Model,
 	ModelNotFoundError,
 } from "../../src/index.js";
@@ -36,6 +38,14 @@ export const postsShape = sqliteTable("posts", {
 	title: text("title").notNull(),
 });
 
+/** The shape both dialects' `notes` tables share (typed via SQLite). */
+export const notesShape = sqliteTable("notes", {
+	id: integer("id").primaryKey({ autoIncrement: true }),
+	title: text("title").notNull(),
+	active: integer("active", { mode: "boolean" }).notNull().default(true),
+	deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+});
+
 type UserColumn = keyof typeof usersShape.$inferSelect & string;
 
 export type UsersModel<THidden extends UserColumn = never> = Model<
@@ -59,9 +69,12 @@ export interface SuiteContext {
 	Posts: Model<typeof postsShape, BunSQLiteDatabase>;
 	users: typeof usersShape;
 	posts: typeof postsShape;
+	notes: typeof notesShape;
+	/** The database the models use (typed via SQLite). */
+	db: BunSQLiteDatabase;
 	/** SQL statements logged by the database since the last `reset()`. */
 	queries: string[];
-	/** Empty both tables and the query log. */
+	/** Empty every table and the query log. */
 	reset(): Promise<void>;
 	/** Matches the default-assigned key of a `posts` row. */
 	postIdPattern: RegExp;
@@ -724,6 +737,268 @@ export function describeModelSuite(
 					await ctx.Users.create({ name: "A", email: "a@x.io" }),
 				);
 				expect(user.toJSON().email).toBe("a@x.io");
+			});
+		});
+
+		describe("soft deletes", () => {
+			const defineNotes = () =>
+				defineModel(ctx.db, ctx.notes, { softDeletes: true });
+			const seedNotes = async () => {
+				const Notes = defineNotes();
+				const keep = persisted(await Notes.create({ title: "keep" }));
+				const gone = persisted(await Notes.create({ title: "gone" }));
+				expect(await gone.delete()).toBe(true);
+				ctx.queries.length = 0;
+				return { Notes, keep, gone };
+			};
+			const titles = (rows: { title: string }[]) =>
+				rows.map((n) => n.title).sort();
+
+			it("delete() sets deletedAt instead of removing the row", async () => {
+				const Notes = defineNotes();
+				const note = persisted(await Notes.create({ title: "a" }));
+				expect(note.trashed()).toBe(false);
+				const before = Date.now();
+				expect(await note.delete()).toBe(true);
+
+				expect(note.trashed()).toBe(true);
+				expect(note.deletedAt).toBeInstanceOf(Date);
+				expect(note.deletedAt?.getTime()).toBeGreaterThanOrEqual(before - 1000);
+				expect(note.isDirty()).toBe(false);
+				const [row] = await Notes.query();
+				expect(row?.deletedAt).toBeInstanceOf(Date);
+				expect(ctx.queries.join("\n")).not.toMatch(/delete from/i);
+			});
+
+			it("delete() writes only deletedAt and keeps other unsaved changes", async () => {
+				const Notes = defineNotes();
+				const note = persisted(await Notes.create({ title: "a" }));
+				note.title = "unsaved";
+				await note.delete();
+				expect(note.getDirty()).toEqual({ title: "unsaved" });
+				const [row] = await Notes.query();
+				expect(row?.title).toBe("a");
+			});
+
+			it("excludes trashed rows from find(), findOrFail() and where()", async () => {
+				const { Notes, keep, gone } = await seedNotes();
+				expect(await Notes.find(gone.id)).toBeNull();
+				await expect(Notes.findOrFail(gone.id)).rejects.toBeInstanceOf(
+					ModelNotFoundError,
+				);
+				expect((await Notes.find(keep.id))?.title).toBe("keep");
+				expect(titles(await Notes.where(undefined).get())).toEqual(["keep"]);
+				expect(
+					await Notes.where(eq(ctx.notes.title, "gone")).first(),
+				).toBeNull();
+			});
+
+			it("withTrashed() includes trashed rows", async () => {
+				const { Notes, gone } = await seedNotes();
+				expect(titles(await Notes.withTrashed().get())).toEqual([
+					"gone",
+					"keep",
+				]);
+				const found = await Notes.withTrashed()
+					.where(eq(ctx.notes.id, gone.id))
+					.first();
+				expect(found?.trashed()).toBe(true);
+				expect(
+					titles(
+						await Notes.where(like(ctx.notes.title, "%e%")).withTrashed().get(),
+					),
+				).toEqual(["gone", "keep"]);
+			});
+
+			it("onlyTrashed() returns only trashed rows", async () => {
+				const { Notes } = await seedNotes();
+				expect(titles(await Notes.onlyTrashed().get())).toEqual(["gone"]);
+				expect(
+					await Notes.onlyTrashed().where(eq(ctx.notes.title, "keep")).first(),
+				).toBeNull();
+				expect(
+					titles(await Notes.where(undefined).onlyTrashed().get()),
+				).toEqual(["gone"]);
+			});
+
+			it("restore() clears deletedAt and fires saving and updating", async () => {
+				const { Notes, gone } = await seedNotes();
+				const log: string[] = [];
+				Notes.on("saving", () => void log.push("saving"));
+				Notes.on("updating", () => void log.push("updating"));
+				expect(await gone.restore()).toBe(gone);
+				expect(gone.trashed()).toBe(false);
+				expect(gone.deletedAt).toBeNull();
+				expect(gone.isDirty()).toBe(false);
+				expect(log).toEqual(["saving", "updating"]);
+				expect((await Notes.find(gone.id))?.title).toBe("gone");
+			});
+
+			it("restore() is cancelled by an updating listener", async () => {
+				const { Notes, gone } = await seedNotes();
+				Notes.on("updating", () => false);
+				expect(await gone.restore()).toBe(false);
+				expect(await Notes.find(gone.id)).toBeNull();
+			});
+
+			it("forceDelete() removes the row and fires deleting", async () => {
+				const { Notes, keep, gone } = await seedNotes();
+				const log: string[] = [];
+				Notes.on("deleting", (note) => void log.push(note.title));
+				expect(await keep.forceDelete()).toBe(true);
+				expect(await gone.forceDelete()).toBe(true);
+				expect(log).toEqual(["keep", "gone"]);
+				expect(await Notes.query()).toEqual([]);
+			});
+
+			it("deleting returning false cancels delete() and forceDelete()", async () => {
+				const { Notes, keep } = await seedNotes();
+				Notes.on("deleting", () => false);
+				expect(await keep.delete()).toBe(false);
+				expect(await keep.forceDelete()).toBe(false);
+				expect(ctx.queries).toEqual([]);
+				expect(keep.trashed()).toBe(false);
+				expect((await Notes.find(keep.id))?.trashed()).toBe(false);
+			});
+
+			it("a trashed instance can still be saved and refreshed", async () => {
+				const { gone } = await seedNotes();
+				gone.title = "edited";
+				expect(await gone.save()).toBe(gone);
+				expect(await gone.refresh()).toBe(gone);
+				expect(gone.title).toBe("edited");
+				expect(gone.trashed()).toBe(true);
+			});
+
+			it("bulk delete() soft-deletes, forceDelete() and restore() work in bulk", async () => {
+				const { Notes } = await seedNotes();
+				await Notes.create({ title: "other" });
+				expect(await Notes.where(eq(ctx.notes.title, "keep")).delete()).toBe(1);
+				expect(titles(await Notes.where(undefined).get())).toEqual(["other"]);
+				expect(titles(await Notes.onlyTrashed().get())).toEqual([
+					"gone",
+					"keep",
+				]);
+
+				expect(await Notes.where(eq(ctx.notes.title, "keep")).restore()).toBe(
+					1,
+				);
+				expect(titles(await Notes.where(undefined).get())).toEqual([
+					"keep",
+					"other",
+				]);
+
+				// forceDelete() respects the trashed filter: only "gone" is trashed.
+				expect(await Notes.onlyTrashed().forceDelete()).toBe(1);
+				expect(titles(await Notes.query())).toEqual(["keep", "other"]);
+				expect(await Notes.where(undefined).forceDelete()).toBe(2);
+				expect(await Notes.query()).toEqual([]);
+			});
+
+			it("bulk update() skips trashed rows unless withTrashed()", async () => {
+				const { Notes } = await seedNotes();
+				expect(await Notes.where(undefined).update({ active: false })).toBe(1);
+				expect(await Notes.withTrashed().update({ active: false })).toBe(2);
+			});
+
+			it("query() is raw Drizzle and ignores soft deletes", async () => {
+				const { Notes } = await seedNotes();
+				expect(titles(await Notes.query())).toEqual(["gone", "keep"]);
+			});
+
+			it("models without softDeletes delete for real and have no soft-delete API", async () => {
+				const Notes = defineModel(ctx.db, ctx.notes);
+				const note = persisted(await Notes.create({ title: "a" }));
+				expect("restore" in note).toBe(false);
+				expect("trashed" in note).toBe(false);
+				expect("forceDelete" in note).toBe(false);
+				expect("withTrashed" in Notes).toBe(false);
+				expect("onlyTrashed" in Notes.where(undefined)).toBe(false);
+				await note.delete();
+				expect(await Notes.query()).toEqual([]);
+			});
+		});
+
+		describe("scopes", () => {
+			const defineNotes = () =>
+				defineModel(ctx.db, ctx.notes, {
+					softDeletes: true,
+					scopes: {
+						active: (q) => q.where(eq(ctx.notes.active, true)),
+						titled: (q, prefix: string) =>
+							q.where(like(ctx.notes.title, `${prefix}%`)),
+					},
+				});
+			const seedNotes = async () => {
+				const Notes = defineNotes();
+				await Notes.create({ title: "a1" });
+				await Notes.create({ title: "a2", active: false });
+				await Notes.create({ title: "b1" });
+				const trashed = persisted(await Notes.create({ title: "a3" }));
+				await trashed.delete();
+				return Notes;
+			};
+			const titles = (rows: { title: string }[]) =>
+				rows.map((n) => n.title).sort();
+
+			it("are callable on the model", async () => {
+				const Notes = await seedNotes();
+				expect(titles(await Notes.active().get())).toEqual(["a1", "b1"]);
+				expect((await Notes.titled("b").first())?.title).toBe("b1");
+			});
+
+			it("chain with where(), each other and the trashed filters", async () => {
+				const Notes = await seedNotes();
+				expect(
+					titles(await Notes.active().where(like(ctx.notes.title, "a%")).get()),
+				).toEqual(["a1"]);
+				expect(
+					titles(await Notes.where(like(ctx.notes.title, "a%")).active().get()),
+				).toEqual(["a1"]);
+				expect(titles(await Notes.active().titled("b").get())).toEqual(["b1"]);
+				expect(titles(await Notes.titled("a").withTrashed().get())).toEqual([
+					"a1",
+					"a2",
+					"a3",
+				]);
+				expect(titles(await Notes.onlyTrashed().titled("a").get())).toEqual([
+					"a3",
+				]);
+			});
+
+			it("apply to bulk writes", async () => {
+				const Notes = await seedNotes();
+				expect(await Notes.active().titled("a").update({ title: "x" })).toBe(1);
+				expect(await Notes.titled("x").delete()).toBe(1);
+				expect(titles(await Notes.where(undefined).get())).toEqual([
+					"a2",
+					"b1",
+				]);
+			});
+
+			it("queries are immutable: chaining returns a new query", async () => {
+				const Notes = await seedNotes();
+				const active = Notes.active();
+				const narrowed = active.titled("b");
+				expect(titles(await active.get())).toEqual(["a1", "b1"]);
+				expect(titles(await narrowed.get())).toEqual(["b1"]);
+			});
+
+			it("throws when a scope name is reserved", () => {
+				for (const name of ["where", "find", "get", "delete", "then"]) {
+					expect(() =>
+						defineModel(ctx.db, ctx.notes, {
+							scopes: { [name]: (q: unknown) => q } as never,
+						}),
+					).toThrow(new RegExp(`scope "${name}" .*reserved`));
+				}
+			});
+
+			it("throws when a scope does not return a query", async () => {
+				const Notes = defineModel(ctx.db, ctx.notes, {
+					scopes: { broken: (() => undefined) as never },
+				});
+				expect(() => Notes.broken()).toThrow(/scope "broken" .*must return/);
 			});
 		});
 	});
