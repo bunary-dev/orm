@@ -17,6 +17,7 @@ import { SQL } from "bun";
 import { sql } from "drizzle-orm";
 import { type BunSQLDatabase, drizzle } from "drizzle-orm/bun-sql";
 import {
+	boolean,
 	integer,
 	jsonb,
 	pgTable,
@@ -28,6 +29,7 @@ import {
 import { defineModel, type Model } from "../src/index.js";
 import {
 	describeModelSuite,
+	type notesShape,
 	type postsShape,
 	type SuiteContext,
 	type usersShape,
@@ -51,6 +53,13 @@ const posts = pgTable("orm_test_posts", {
 	title: text("title").notNull(),
 });
 
+const notes = pgTable("orm_test_notes", {
+	id: serial("id").primaryKey(),
+	title: text("title").notNull(),
+	active: boolean("active").notNull().default(true),
+	deletedAt: timestamp("deleted_at", { precision: 3 }),
+});
+
 const tokens = pgTable("orm_test_tokens", {
 	id: uuid("id").primaryKey().defaultRandom(),
 	label: text("label").notNull(),
@@ -70,7 +79,7 @@ if (!skip) {
 			logger: { logQuery: (query) => void queries.push(query) },
 		});
 		await db.execute(
-			sql`DROP TABLE IF EXISTS orm_test_users, orm_test_posts, orm_test_tokens`,
+			sql`DROP TABLE IF EXISTS orm_test_users, orm_test_posts, orm_test_tokens, orm_test_notes`,
 		);
 		await db.execute(sql`CREATE TABLE orm_test_users (
 			id SERIAL PRIMARY KEY,
@@ -84,6 +93,12 @@ if (!skip) {
 			id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
 			title TEXT NOT NULL
 		)`);
+		await db.execute(sql`CREATE TABLE orm_test_notes (
+			id SERIAL PRIMARY KEY,
+			title TEXT NOT NULL,
+			active BOOLEAN NOT NULL DEFAULT true,
+			deleted_at TIMESTAMP(3)
+		)`);
 		await db.execute(sql`CREATE TABLE orm_test_tokens (
 			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 			label TEXT NOT NULL
@@ -92,7 +107,7 @@ if (!skip) {
 
 	afterAll(async () => {
 		await db?.execute(
-			sql`DROP TABLE IF EXISTS orm_test_users, orm_test_posts, orm_test_tokens`,
+			sql`DROP TABLE IF EXISTS orm_test_users, orm_test_posts, orm_test_tokens, orm_test_notes`,
 		);
 		await client?.close();
 	});
@@ -100,7 +115,7 @@ if (!skip) {
 
 const truncate = () =>
 	db.execute(
-		sql`TRUNCATE orm_test_users, orm_test_posts, orm_test_tokens RESTART IDENTITY`,
+		sql`TRUNCATE orm_test_users, orm_test_posts, orm_test_tokens, orm_test_notes RESTART IDENTITY`,
 	);
 
 describeModelSuite(
@@ -113,6 +128,8 @@ describeModelSuite(
 		defineUsers: (options) => defineModel(db, users, options as never) as never,
 		users: users as unknown as typeof usersShape,
 		posts: posts as unknown as typeof postsShape,
+		notes: notes as unknown as typeof notesShape,
+		db: db as never,
 		queries,
 		postIdPattern: UUID,
 		async reset() {

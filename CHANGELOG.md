@@ -20,6 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hidden: [...]` option: columns that are loaded and usable but left out of `toJSON()` / `JSON.stringify`, also in `toJSON()`'s return type (#81)
 - A column whose JS key shadows an instance method (`save`, `delete`, `toJSON`, `isDirty`, `getDirty`, `refresh`) is now a type error in `defineModel()`, naming the column, in addition to the runtime error; exported `ReservedColumnName` type (#81)
 - Every model method accepts `{ tx }` to run on a Drizzle transaction; with `tx`, errors are thrown synchronously so synchronous bun:sqlite transactions roll back (#80)
+- Soft deletes: `defineModel(db, table, { softDeletes: true })` (a type error unless the table has a nullable `Date` column keyed `deletedAt`; throws without a `deletedAt` column). Instance `delete()` then fires `deleting` (cancellable) and sets `deletedAt` instead of removing the row; `find`, `findOrFail`, `where().get()` / `.first()`, bulk `update()` and scopes leave out soft-deleted rows. Adds instance `trashed()`, `restore()` (via `save()`, so `saving` / `updating` fire) and `forceDelete()` (fires `deleting`, deletes for real); `withTrashed()` / `onlyTrashed()` on the model and its queries; and bulk `.restore()` / `.forceDelete()`, while bulk `.delete()` soft-deletes. `query()` still returns every row (#82)
+- Named scopes: `defineModel(db, table, { scopes: { active: (q) => q.where(...) } })` adds `Model.active()` and `query.active()`, chainable with `where()`, other scopes and the trashed filters; scopes may take arguments (`olderThan: (q, age: number) => ...`). Scope names and argument types are inferred, so an unknown scope is a type error; a reserved scope name (`where`, `get`, `delete`, `then`, …, exported as `ReservedScopeName`) is a type error and throws in `defineModel()` (#82)
+- `where()` queries chain: `Model.where(a).where(b)` combines conditions with `AND`; queries are immutable (#82)
+
+### Changed
+
+- `restore`, `trashed` and `forceDelete` are now reserved column keys on every model (type error and runtime error in `defineModel()`), alongside the other instance method names (#82)
+- `WhereQuery` is renamed `ModelQuery`; the `Model`, `ModelInstance`, `ModelEventTargets`, `ModelListeners` and `DefineModelOptions` types take additional (defaulted) type parameters for soft deletes and scopes, and `Model` is now a type alias (#82)
 
 ## [0.2.0] - 2026-09-21
 

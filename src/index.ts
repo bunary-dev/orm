@@ -3,7 +3,7 @@
  *
  * Laravel-style models on top of Drizzle: define your tables with Drizzle,
  * wrap them with `defineModel()` and get CRUD with dirty tracking, model
- * events and hidden columns. Supports
+ * events, hidden columns, soft deletes and named scopes. Supports
  * SQLite (`drizzle-orm/bun-sqlite`) and Postgres (`drizzle-orm/bun-sql`).
  *
  * @example
@@ -33,6 +33,7 @@ export { defineModel } from "./model.js";
 export type {
 	AnyDatabase,
 	CheckReservedColumns,
+	CheckReservedScopes,
 	DefineModelOptions,
 	InstanceMethods,
 	Model,
@@ -41,13 +42,26 @@ export type {
 	ModelInstance,
 	ModelListener,
 	ModelListeners,
+	ModelMethods,
+	ModelQuery,
 	NewRowOf,
+	NoScopes,
 	PrimaryKeyColumn,
+	QueryMethods,
 	QueryOptions,
 	ReservedColumnName,
+	ReservedScopeName,
 	RowOf,
+	Scope,
+	ScopeConstraint,
+	ScopeMap,
+	ScopeMethods,
+	ScopesOf,
 	SelectQuery,
+	SoftDeleteInstanceMethods,
+	SoftDeleteQueryMethods,
+	SoftDeletesRequiresDeletedAt,
+	SupportsSoftDeletes,
 	TableFor,
 	TransactionFor,
-	WhereQuery,
 } from "./types.js";

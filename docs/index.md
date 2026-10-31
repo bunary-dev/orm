@@ -4,7 +4,7 @@ Laravel-style models for Bunary, built on [Drizzle](https://orm.drizzle.team).
 
 You define tables with Drizzle; `defineModel()` wraps a table in a model with
 `find` / `create` / `save` / `delete`, dirty tracking, model events, hidden
-columns and a typed not-found error. Everything else (joins, aggregates, migrations) is plain Drizzle.
+columns, soft deletes, named scopes and a typed not-found error. Everything else (joins, aggregates, migrations) is plain Drizzle.
 
 Supported dialects:
 
@@ -70,6 +70,8 @@ await found?.delete();
 | `options.primaryKey`  | Primary key column, e.g. `tags.slug`. Defaults to the table's `.primaryKey()` column |
 | `options.hidden`      | Column keys left out of `toJSON()`, see [Hidden columns](#hidden-columns) |
 | `options.events`      | Listeners per event, see [Events](#events)                                 |
+| `options.softDeletes` | `true` to soft-delete via a `deletedAt` column, see [Soft deletes](#soft-deletes) |
+| `options.scopes`      | Named query scopes, see [Scopes](#scopes)                                  |
 
 Row types are inferred from the table: instances have the table's select type
 (`typeof users.$inferSelect`), `create()` takes its insert type
@@ -83,13 +85,16 @@ type error.
   is given (composite keys are not supported);
 - `primaryKey` is not a column of the table;
 - a column's JS key is a [reserved name](#reserved-names);
-- a `hidden` key is not a column of the table.
+- a `hidden` key is not a column of the table;
+- `softDeletes` is `true` but the table has no `deletedAt` column;
+- a scope name is [reserved](#scopes) or a scope is not a function.
 
 ### Reserved names
 
 Columns are properties of the instance, next to its methods, so a column's JS
 key may not be one of the instance method names: `isDirty`, `getDirty`,
-`save`, `delete`, `refresh`, `toJSON` (or `constructor`). Such a table is a
+`save`, `delete`, `refresh`, `toJSON`, and the soft-delete methods `restore`,
+`trashed` and `forceDelete` (reserved on every model), or `constructor`. Such a table is a
 **type error** in `defineModel()`, naming the column, and `defineModel()`
 also **throws at runtime** (`column "save" of "posts" is reserved for a model
 method; rename its JS key`) for code that is not type-checked.
@@ -201,6 +206,16 @@ const adults = await User.where(gt(users.age, 17)).get();
 const unnamed = await User.where(and(isNull(users.age), eq(users.name, ""))).first();
 ```
 
+`where()` returns a model query (`ModelQuery`). Calling `.where()` on it
+again adds another condition, combined with `AND`. Queries are immutable:
+each chained call returns a new query and leaves the old one as it was.
+[Scopes](#scopes) and, with soft deletes, `withTrashed()` / `onlyTrashed()`
+chain the same way.
+
+```typescript
+const adultAdas = await User.where(gt(users.age, 17)).where(eq(users.name, "Ada")).get();
+```
+
 For ordering, limits, joins or aggregates use [`query()`](#raw-drizzle-query-and-hydrate).
 
 ### Bulk writes: `where(condition).update(values, options?)` / `.delete(options?)`
@@ -284,7 +299,8 @@ change different columns do not overwrite each other.
 ### `delete(options?)`
 
 Fires `deleting`, then deletes the row, matched by its persisted primary key.
-Returns `true`, or `false` when a listener cancelled the delete.
+Returns `true`, or `false` when a listener cancelled the delete. With
+[soft deletes](#soft-deletes) it sets `deletedAt` instead.
 
 ### `refresh(options?)`
 
@@ -301,7 +317,7 @@ Eloquent's model events:
 | `saving`   | `create()` and `save()`, first                   | the insert values, or the instance   |
 | `creating` | `create()`, after `saving`                       | the insert values (a mutable copy)   |
 | `updating` | `save()`, after `saving`, only if anything is dirty | the instance                       |
-| `deleting` | `delete()`                                       | the instance                         |
+| `deleting` | `delete()` and `forceDelete()`                   | the instance                         |
 
 Register listeners with the `events` option (one function or a list per
 event) and/or with `Model.on(event, listener)`, which returns a function that
@@ -361,9 +377,118 @@ enumerable properties, so spreading (`{ ...user }`) or `Object.keys(user)`
 still includes them, as do the plain rows from `query()`. Keys are checked:
 a key that is not a column is a type error and throws in `defineModel()`.
 
+## Soft deletes
+
+With `softDeletes: true`, deleting a row sets its `deletedAt` column instead
+of removing it, and the model's queries leave such rows out, as with
+Eloquent's `SoftDeletes`. The table needs a **nullable `Date` column with the
+JS key `deletedAt`** (the SQL name can be anything); on any other table,
+`softDeletes: true` is a type error, and `defineModel()` throws if there is
+no `deletedAt` column at all.
+
+```typescript
+// SQLite
+const posts = sqliteTable("posts", {
+  id: integer().primaryKey({ autoIncrement: true }),
+  title: text().notNull(),
+  deletedAt: integer("deleted_at", { mode: "timestamp_ms" }),
+});
+// Postgres: deletedAt: timestamp("deleted_at"),
+
+const Post = defineModel(db, posts, { softDeletes: true });
+
+const post = await Post.findOrFail(1);
+await post.delete(); // UPDATE "posts" SET "deleted_at" = ? WHERE "posts"."id" = ?
+post.trashed(); // true
+await Post.find(1); // null
+
+await Post.withTrashed().where(eq(posts.id, 1)).first(); // found again
+await post.restore(); // deletedAt = null
+await post.forceDelete(); // DELETE FROM "posts" WHERE ...
+```
+
+**Instances**
+
+| Method                  | Does                                                                                   | Returns |
+| ----------------------- | -------------------------------------------------------------------------------------- | ------- |
+| `delete(options?)`      | Fires `deleting`, then sets `deletedAt` to now (writing only that column; other unsaved changes stay dirty) | `true`, or `false` if cancelled |
+| `trashed()`             | Whether `deletedAt` is set                                                             | `boolean` |
+| `restore(options?)`     | Sets `deletedAt` to `null` and calls `save()`, so `saving` and `updating` fire and other unsaved changes are written too | the instance, or `false` if cancelled |
+| `forceDelete(options?)` | Fires `deleting`, then really deletes the row                                          | `true`, or `false` if cancelled |
+
+A trashed instance can still be `save()`d and `refresh()`ed: those match by
+primary key only.
+
+**Queries.** `find()`, `findOrFail()`, `where().get()` / `.first()`, bulk
+`update()` and [scopes](#scopes) leave out soft-deleted rows. To change that,
+start or chain a query with:
+
+| Method          | Rows                         |
+| --------------- | ---------------------------- |
+| `withTrashed()` | soft-deleted ones included   |
+| `onlyTrashed()` | only the soft-deleted ones   |
+
+```typescript
+const all = await Post.withTrashed().get();
+const binned = await Post.where(lt(posts.deletedAt, lastMonth)).onlyTrashed().get();
+```
+
+Bulk writes on a soft-deleting model (none fire events, all return a count):
+
+| Method                         | Does                                                                    |
+| ------------------------------ | ----------------------------------------------------------------------- |
+| `.delete(options?)`            | sets `deletedAt` on the matching rows (not already trashed, unless `withTrashed()`) |
+| `.restore(options?)`           | sets `deletedAt` to `null` on the matching **trashed** rows             |
+| `.forceDelete(options?)`       | really deletes the matching rows; trashed rows only with `withTrashed()` / `onlyTrashed()` |
+
+```typescript
+await Post.onlyTrashed().where(lt(posts.deletedAt, lastYear)).forceDelete(); // purge
+```
+
+`query()` is raw Drizzle and **includes** soft-deleted rows; filter with
+`isNull(posts.deletedAt)` yourself. Models without `softDeletes` have none of
+these methods (using them is a type error) and delete for real.
+
+## Scopes
+
+Named scopes are reusable query constraints, like Eloquent's local scopes.
+Define them with the `scopes` option: each gets the query (plus any arguments)
+and returns a query, usually `query.where(...)`:
+
+```typescript
+const User = defineModel(db, users, {
+  softDeletes: true,
+  scopes: {
+    active: (q) => q.where(eq(users.active, true)),
+    olderThan: (q, age: number) => q.where(gt(users.age, age)),
+  },
+});
+
+await User.active().get();
+await User.active().olderThan(17).first();
+await User.where(like(users.email, "%@example.com")).active().get();
+await User.onlyTrashed().active().get();
+await User.active().update({ newsletter: true }); // bulk writes too
+```
+
+- Each scope becomes a method of the model and of its queries, chainable
+  with `where()`, other scopes and `withTrashed()` / `onlyTrashed()`.
+- Scope names and argument types are inferred: `User.inactive()` and
+  `User.olderThan("x")` are type errors.
+- The query a scope receives is typed without the model's scopes; to combine
+  scopes, chain them at the call site.
+- A scope must return the query it was given or one chained from it;
+  returning anything else throws when the scope is called.
+- Scope names may not shadow model or query members: `db`, `table`,
+  `tableName`, `find`, `findOrFail`, `where`, `create`, `query`, `hydrate`,
+  `on`, `get`, `first`, `update`, `delete`, `restore`, `forceDelete`,
+  `withTrashed`, `onlyTrashed`, `then` (or `constructor`). Such a name is a
+  type error naming the scope, and `defineModel()` throws for it. The list is
+  exported as the `ReservedScopeName` type.
+
 ## Transactions
 
-`create()`, `save()`, `delete()`, bulk `where().update()` / `.delete()` and every read (`find`, `findOrFail`,
+`create()`, `save()`, `delete()`, `restore()`, `forceDelete()`, bulk `where().update()` / `.delete()` / `.restore()` / `.forceDelete()` and every read (`find`, `findOrFail`,
 `where().get/first`, `refresh`, `query`) accept `{ tx }`: a Drizzle
 transaction (or database) of the same dialect, used instead of the model's
 `db`.
@@ -430,7 +555,7 @@ saved inside it keep their new values; call `refresh()` to reload them.
 ## Raw Drizzle: `query()` and `hydrate()`
 
 `query(options?)` is `db.select().from(table)`, fully typed, for anything the
-model API does not cover. It returns plain rows.
+model API does not cover. It returns plain rows, soft-deleted ones included.
 
 ```typescript
 import { desc, gt } from "drizzle-orm";
@@ -495,7 +620,7 @@ values are bound as parameters. Conditions are Drizzle expressions; inside
 | Error                | Thrown by                                     | Properties    |
 | -------------------- | --------------------------------------------- | ------------- |
 | `ModelNotFoundError` | `findOrFail()`, `save()` and `refresh()` on a deleted row | `table`, `id` |
-| `Error`              | `defineModel()` (invalid definition, reserved column name, unknown hidden key), `create()` (empty-string key) | |
+| `Error`              | `defineModel()` (invalid definition, reserved column or scope name, unknown hidden key, `softDeletes` without `deletedAt`), `create()` (empty-string key), a scope that does not return a query | |
 
 Errors thrown by event listeners propagate unchanged.
 
@@ -505,15 +630,18 @@ Database errors (constraint violations, …) are passed through from the driver.
 
 | Export                         | Description                                          |
 | ------------------------------ | ---------------------------------------------------- |
-| `Model<TTable, TDb, TId, THidden>` | What `defineModel()` returns                     |
-| `ModelInstance<TTable, TDb, THidden>` | A row plus the instance methods              |
+| `Model<TTable, TDb, TId, THidden, TSoft, TScopes>` | What `defineModel()` returns (`ModelMethods` plus soft-delete and scope methods) |
+| `ModelInstance<TTable, TDb, THidden, TSoft>` | A row plus the instance methods (`InstanceMethods`, `SoftDeleteInstanceMethods`) |
 | `RowOf<TTable>` / `NewRowOf<TTable>` | Select / insert types of a table               |
 | `QueryOptions<TDb>`            | `{ tx? }`                                            |
-| `DefineModelOptions`           | `{ primaryKey?, hidden?, events? }`                  |
+| `DefineModelOptions`           | `{ primaryKey?, hidden?, events?, softDeletes?, scopes? }` |
 | `ModelEvent`                   | `"creating" \| "updating" \| "saving" \| "deleting"` |
 | `ModelListener<T>`, `ModelListeners`, `ModelEventTargets` | A listener, the `events` option, what each event receives |
 | `ReservedColumnName`, `CheckReservedColumns` | The reserved column keys and the check `defineModel()` applies |
-| `WhereQuery`                   | What `where()` returns                               |
+| `ModelQuery<TTable, TDb, THidden, TSoft, TScopes>` | What `where()`, `withTrashed()` / `onlyTrashed()` and scopes return (`QueryMethods`, `SoftDeleteQueryMethods`) |
+| `Scope`, `ScopeMap`, `ScopeMethods`, `ScopesOf`, `NoScopes` | A scope, the `scopes` option, the methods it adds |
+| `ReservedScopeName`, `CheckReservedScopes`, `ScopeConstraint` | The reserved scope names and the check `defineModel()` applies |
+| `SupportsSoftDeletes<TTable>`, `SoftDeletesRequiresDeletedAt` | Whether a table can soft-delete, and the type error shown when it cannot |
 | `SelectQuery<TDb, TTable>`     | What `query()` returns                               |
 | `AnyDatabase`, `TableFor`, `TransactionFor`, `PrimaryKeyColumn`, `InstanceMethods` | Helpers used by the above |
 
