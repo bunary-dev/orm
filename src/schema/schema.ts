@@ -154,10 +154,10 @@ export const Schema = {
 	 */
 	hasTable(name: string, driver?: DatabaseDriver): boolean {
 		const db = driver ?? getDriver();
-		const quoted = `"${name.replace(/"/g, '""')}"`;
 		const result = db
 			.query(
-				`SELECT name FROM sqlite_master WHERE type='table' AND name=${quoted}`,
+				"SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
+				name,
 			)
 			.get();
 		return result !== null;
