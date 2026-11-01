@@ -7,10 +7,10 @@ Requires Bun ≥ 1.4.0.
 ## Installation
 
 ```bash
-bun add @bunary/orm drizzle-orm
+bun add @bunary/orm@^0.4.0 drizzle-orm
 ```
 
-`drizzle-orm` is a peer dependency. `@bunary/core` is an optional peer: with it, `ormProvider` (from `@bunary/orm/provider`) builds the Drizzle database from the `database` config key and binds it under `DatabaseToken`.
+`drizzle-orm` is a peer dependency. `@bunary/core` (^0.4.0, `bun add @bunary/core@^0.4.0`) is an optional peer: with it, `ormProvider` (from `@bunary/orm/provider`) builds the Drizzle database from the `database` config key and binds it under `DatabaseToken`.
 
 ## Quick start
 
