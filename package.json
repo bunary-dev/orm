@@ -1,6 +1,6 @@
 {
   "name": "@bunary/orm",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "description": "Laravel-style models on Drizzle for Bunary - a Bun-first backend framework",
   "type": "module",
   "main": "./dist/index.js",
@@ -22,7 +22,8 @@
   "files": [
     "dist",
     "README.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
+    "LICENSE"
   ],
   "sideEffects": false,
   "scripts": {
@@ -61,7 +62,7 @@
     "bun": ">=1.4.0"
   },
   "peerDependencies": {
-    "@bunary/core": "^1.0.0-rc.1",
+    "@bunary/core": "^0.4.0",
     "drizzle-orm": "^0.45.0"
   },
   "peerDependenciesMeta": {
@@ -71,7 +72,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
-    "@bunary/core": "file:./vendor/bunary-core-1.0.0-rc.1.tgz",
+    "@bunary/core": "^0.4.0",
     "@types/bun": "^1.4.2",
     "drizzle-orm": "^0.45.4",
     "typescript": "^7.0.2"

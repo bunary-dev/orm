@@ -20,12 +20,16 @@ Supported dialects:
 `drizzle-orm` is a peer dependency: install it next to the orm.
 
 ```bash
-bun add @bunary/orm drizzle-orm
+bun add @bunary/orm@^0.4.0 drizzle-orm
 bun add -d drizzle-kit # migrations
 ```
 
-`@bunary/core` (^1.0.0-rc.1) is an optional peer, needed only for
-[`ormProvider`](#bunarycore-integration).
+`@bunary/core` (^0.4.0) is an optional peer, needed only for
+[`ormProvider`](#bunarycore-integration):
+
+```bash
+bun add @bunary/core@^0.4.0
+```
 
 Requires Bun ≥ 1.4.0.
 
@@ -788,7 +792,8 @@ type UserRecord = ModelInstance<typeof users>;
 
 ## Upgrading from 0.2.x
 
-This version replaces the hand-rolled query builder, schema builder, migrator and
+0.4.0 (also for projects on 0.1.x, the last npm release, which has the same
+pre-Drizzle API) replaces the hand-rolled query builder, schema builder, migrator and
 drivers with Drizzle. There are no compatibility shims.
 
 | 0.2                                              | Now                                                    |
