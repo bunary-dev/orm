@@ -24,3 +24,25 @@ describe("package metadata (0.4.0 baseline)", () => {
 		expect(pkg.files).toEqual(["dist", "README.md", "CHANGELOG.md", "LICENSE"]);
 	});
 });
+
+describe("publish scripts (#97)", () => {
+	test("clean empties dist/", () => {
+		expect(pkg.scripts.clean).toBe("rm -rf dist");
+	});
+
+	test("build starts from a clean dist/", () => {
+		expect(pkg.scripts.build.startsWith("bun run clean && ")).toBe(true);
+	});
+
+	test("prepublishOnly runs clean, then build, then tests and typecheck", () => {
+		const steps = pkg.scripts.prepublishOnly
+			.split("&&")
+			.map((s: string) => s.trim());
+		expect(steps).toEqual([
+			"bun run clean",
+			"bun run build",
+			"bun test",
+			"bun run typecheck",
+		]);
+	});
+});
